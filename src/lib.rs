@@ -12,8 +12,9 @@ use axum::{
     routing::{get, get_service, post},
     Json, Router,
 };
+use graphql::AgentManager;
 pub use graphql::CertManager;
-use review_database::Store;
+use review_database::{Database, Store};
 use rustls::{Certificate, ClientConfig, RootCertStore};
 use serde_json::json;
 use std::{
@@ -21,36 +22,55 @@ use std::{
     io,
     net::SocketAddr,
     path::{Path, PathBuf},
-    sync::Arc,
+    sync::{Arc, Mutex},
 };
 use tokio::{sync::Notify, task::JoinHandle};
 use tower_http::{services::ServeDir, trace::TraceLayer};
 use tracing::error;
 
-pub async fn serve<P: AsRef<Path>>(
-    addr: SocketAddr,
-    document_root: PathBuf,
-    schema: graphql::Schema,
+/// Parameters for a web server.
+pub struct ServerConfig {
+    pub addr: SocketAddr,
+    pub document_root: PathBuf,
+    pub cert_manager: Arc<dyn CertManager>,
+    pub cert_reload_handle: Arc<Notify>,
+    pub ca_certs: Vec<PathBuf>,
+    pub reverse_proxies: Vec<archive::Config>,
+}
+
+/// Runs a web server.
+pub async fn serve<A>(
+    config: ServerConfig,
+    db: Database,
     store: Arc<Store>,
-    cert_manager: Arc<dyn CertManager>,
-    cert_reload_handle: Arc<Notify>,
-    ca_certs: &[P],
-    reverse_proxies: Vec<archive::Config>,
-) -> Arc<Notify> {
+    ip_locator: Option<Arc<Mutex<ip2location::DB>>>,
+    agent_manager: A,
+) -> Arc<Notify>
+where
+    A: AgentManager + 'static,
+{
     use axum_server::{tls_rustls::RustlsConfig, Handle};
     use tracing::info;
 
+    let schema = graphql::schema(
+        db,
+        store.clone(),
+        agent_manager,
+        ip_locator,
+        config.cert_manager.clone(),
+        config.cert_reload_handle.clone(),
+    );
     let web_srv_shutdown_handle = Arc::new(Notify::new());
     let shutdown_handle = web_srv_shutdown_handle.clone();
-    let client = client(ca_certs);
+    let client = client(&config.ca_certs);
     let server: JoinHandle<anyhow::Result<()>> = tokio::spawn(async move {
         loop {
-            let static_files = get_service(ServeDir::new(document_root.clone()));
+            let static_files = get_service(ServeDir::new(config.document_root.clone()));
 
             let proxies_config = crate::archive::Config::configure_reverse_proxies(
                 &store,
                 &client,
-                &reverse_proxies,
+                &config.reverse_proxies,
             );
 
             let mut router = Router::new()
@@ -69,14 +89,17 @@ pub async fn serve<P: AsRef<Path>>(
             let handle = Handle::new();
             let notify_shutdown = Arc::new(Notify::new());
             let shutdown_completed = Arc::new(Notify::new());
-            let (cert_path, key_path) = (cert_manager.cert_path()?, cert_manager.key_path()?);
-            let config = RustlsConfig::from_pem_file(cert_path, key_path).await?;
+            let (cert_path, key_path) = (
+                config.cert_manager.cert_path()?,
+                config.cert_manager.key_path()?,
+            );
+            let tls_config = RustlsConfig::from_pem_file(cert_path, key_path).await?;
 
             let wait_shutdown = notify_shutdown.clone();
             let completed = shutdown_completed.clone();
             tokio::spawn(graceful_shutdown(handle.clone(), wait_shutdown));
             tokio::spawn(async move {
-                axum_server::bind_rustls(addr, config)
+                axum_server::bind_rustls(config.addr, tls_config)
                     .handle(handle)
                     .serve(router.into_make_service())
                     .await
@@ -85,7 +108,7 @@ pub async fn serve<P: AsRef<Path>>(
             });
 
             let wait_shutdown = web_srv_shutdown_handle.notified();
-            let cert_reload = cert_reload_handle.notified();
+            let cert_reload = config.cert_reload_handle.notified();
 
             tokio::select! {
                 _ = wait_shutdown => {

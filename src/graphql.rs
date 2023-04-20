@@ -57,7 +57,7 @@ use tokio::sync::Notify;
 use vinum::signal;
 
 /// GraphQL schema type.
-pub type Schema = async_graphql::Schema<Query, Mutation, EmptySubscription>;
+pub(super) type Schema = async_graphql::Schema<Query, Mutation, EmptySubscription>;
 
 #[async_trait]
 pub trait AgentManager: Send + Sync {
@@ -91,7 +91,7 @@ pub trait CertManager: Send + Sync {
 ///
 /// The connection pool is stored in `async_graphql::Context` and passed to
 /// every GraphQL API function.
-pub fn schema<B>(
+pub(super) fn schema<B>(
     db: Database,
     store: Arc<Store>,
     agent_manager: B,
@@ -116,10 +116,8 @@ where
 }
 
 /// A set of queries defined in the schema.
-///
-/// This is exposed only for [`Schema`], and not used directly.
 #[derive(MergedObject, Default)]
-pub struct Query(
+pub(super) struct Query(
     account::AccountQuery,
     block_network::BlockNetworkQuery,
     category::CategoryQuery,
@@ -156,7 +154,7 @@ pub struct Query(
 ///
 /// This is exposed only for [`Schema`], and not used directly.
 #[derive(MergedObject, Default)]
-pub struct Mutation(
+pub(super) struct Mutation(
     account::AccountMutation,
     block_network::BlockNetworkMutation,
     category::CategoryMutation,
