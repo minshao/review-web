@@ -5,6 +5,8 @@ allowing users to manage and analyze events from various sources. The web
 interface is built using modern web technologies, and it exposes a GraphQL API
 for flexible data querying and manipulation.
 
+[![Coverage Status](https://codecov.io/gh/aicers/review-web/branch/main/graphs/badge.svg)](https://codecov.io/gh/aicers/review-web)
+
 ## License
 
 Copyright 2018-2023 Petabi, Inc.
