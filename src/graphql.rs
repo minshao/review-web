@@ -70,7 +70,7 @@ pub trait AgentManager: Send + Sync {
     async fn update_traffic_filter_rules(
         &self,
         key: &str,
-        rules: &[IpNet],
+        rules: &[(IpNet, Option<Vec<u16>>, Option<Vec<u16>>)],
     ) -> Result<(), anyhow::Error>;
 }
 
@@ -471,7 +471,7 @@ impl AgentManager for MockAgentManager {
     async fn update_traffic_filter_rules(
         &self,
         _key: &str,
-        _rules: &[IpNet],
+        _rules: &[(IpNet, Option<Vec<u16>>, Option<Vec<u16>>)],
     ) -> Result<(), anyhow::Error> {
         unimplemented!()
     }
