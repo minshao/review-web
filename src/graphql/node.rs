@@ -106,7 +106,7 @@ pub(super) struct Node {
     #[graphql(skip)]
     customer_id: u32,
     description: String,
-    hostname: String,
+    pub(super) hostname: String,
     nics: Vec<Nic>,
     disk_usage_limit: Option<f32>,
     #[graphql(skip)]

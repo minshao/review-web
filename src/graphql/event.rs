@@ -3,7 +3,7 @@ mod group;
 pub(super) use self::group::EventGroupQuery;
 use super::{
     customer::{Customer, HostNetworkGroupInput},
-    filter::{FlowKind, TrafficDirection},
+    filter::{FlowKind, LearningMethod, TrafficDirection},
     network::Network,
     Role, RoleGuard,
 };
@@ -133,6 +133,8 @@ struct EventListFilterInput {
     categories: Option<Vec<u8>>,
     levels: Option<Vec<u8>>,
     kinds: Option<Vec<String>>,
+    learning_methods: Option<Vec<LearningMethod>>,
+    confidence: Option<f32>,
     triage_policies: Option<Vec<ID>>,
 }
 
@@ -822,6 +824,7 @@ impl EventTotalCount {
     }
 }
 
+#[allow(clippy::too_many_lines)]
 fn from_filter_input(
     store: &Arc<Store>,
     input: &EventListFilterInput,
@@ -910,6 +913,13 @@ fn from_filter_input(
         None
     };
 
+    let sensors = if let Some(sensors_input) = &input.sensors {
+        let map = store.node_map();
+        Some(convert_sensors(&map, sensors_input)?)
+    } else {
+        None
+    };
+
     let triage_policies = if let Some(triage_policies) = &input.triage_policies {
         let map = store.triage_policy_map();
         Some(convert_triage_input(&map, triage_policies)?)
@@ -928,6 +938,12 @@ fn from_filter_input(
         categories,
         levels,
         kinds,
+        input
+            .learning_methods
+            .as_ref()
+            .map(|v| v.iter().map(|v| (*v).into()).collect()),
+        sensors,
+        input.confidence,
         triage_policies,
     ))
 }
@@ -1007,6 +1023,26 @@ fn internal_customer_networks(map: &IndexedMap) -> anyhow::Result<Vec<HostNetwor
         }
     }
     Ok(customer_networks)
+}
+
+fn convert_sensors(map: &IndexedMap, sensors: &[ID]) -> anyhow::Result<Vec<String>> {
+    let codec = bincode::DefaultOptions::new();
+    let mut converted_sensors: Vec<String> = Vec::with_capacity(sensors.len());
+    for id in sensors {
+        let i = id
+            .as_str()
+            .parse::<u32>()
+            .context(format!("invalid ID: {}", id.as_str()))?;
+        let Some(value) = map.get_by_id(i)? else {
+            bail!("no such sensor")
+        };
+        let value: super::node::Node = codec
+            .deserialize(value.as_ref())
+            .context("invalid value in database")?;
+
+        converted_sensors.push(value.hostname.clone());
+    }
+    Ok(converted_sensors)
 }
 
 fn convert_triage_input(

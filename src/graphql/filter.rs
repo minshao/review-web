@@ -83,6 +83,8 @@ impl FilterMutation {
         categories: Option<Vec<u8>>,
         levels: Option<Vec<u8>>,
         kinds: Option<Vec<String>>,
+        learning_methods: Option<Vec<LearningMethod>>,
+        confidence: Option<f32>,
     ) -> Result<String> {
         let map = ctx.data::<Arc<Store>>()?.filter_map();
         let account = ctx.data::<String>()?;
@@ -117,6 +119,8 @@ impl FilterMutation {
             categories,
             levels,
             kinds,
+            learning_methods: learning_methods.map(|v| v.into_iter().map(Into::into).collect()),
+            confidence,
         };
 
         if let Some(old_value) = map.get(account.as_bytes())? {
@@ -432,6 +436,23 @@ impl Filter {
             .as_ref()
             .map(|kinds| kinds.iter().map(String::as_str).collect())
     }
+
+    async fn learning_methods(&self) -> Option<Vec<LearningMethod>> {
+        self.inner
+            .learning_methods
+            .as_deref()
+            .map(|learning_methods| {
+                learning_methods
+                    .iter()
+                    .copied()
+                    .map(Into::into)
+                    .collect::<Vec<_>>()
+            })
+    }
+
+    async fn confidence(&self) -> Option<f32> {
+        self.inner.confidence
+    }
 }
 
 impl From<database::Filter> for Filter {
@@ -483,6 +504,10 @@ impl TryFrom<FilterInput> for database::Filter {
             categories: input.categories,
             levels: input.levels,
             kinds: input.kinds,
+            learning_methods: input
+                .learning_methods
+                .map(|values| values.into_iter().map(Into::into).collect()),
+            confidence: input.confidence,
         })
     }
 }
@@ -530,6 +555,14 @@ pub(super) enum FlowKind {
     Internal,
 }
 
+/// Learning method.
+#[derive(Clone, Copy, Enum, Eq, PartialEq)]
+#[graphql(remote = "database::LearningMethod")]
+pub(super) enum LearningMethod {
+    Unsupervised,
+    SemiSupervised,
+}
+
 #[derive(InputObject)]
 struct NetworkInputPointInput {
     network: String,
@@ -555,6 +588,8 @@ struct FilterInput {
     categories: Option<Vec<u8>>,
     levels: Option<Vec<u8>>,
     kinds: Option<Vec<String>>,
+    learning_methods: Option<Vec<LearningMethod>>,
+    confidence: Option<f32>,
 }
 
 #[derive(Enum, Copy, Clone, Eq, PartialEq)]
