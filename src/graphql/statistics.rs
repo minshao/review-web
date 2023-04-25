@@ -2,7 +2,7 @@ use super::{slicing, Role, RoleGuard};
 use async_graphql::{
     connection::{query, Connection, Edge, EmptyFields},
     types::ID,
-    Context, Object, Result,
+    Context, InputObject, Object, Result,
 };
 use chrono::NaiveDateTime;
 use data_encoding::BASE64;
@@ -11,6 +11,23 @@ use serde_json::Value as JsonValue;
 
 #[derive(Default)]
 pub(super) struct StatisticsQuery;
+
+#[derive(InputObject)]
+struct EventRangeInput {
+    first_event_id: i64,
+    last_event_id: i64,
+    event_source: String,
+}
+
+impl From<EventRangeInput> for review_database::EventRange {
+    fn from(input: EventRangeInput) -> Self {
+        Self {
+            first_event_id: input.first_event_id,
+            last_event_id: input.last_event_id,
+            event_source: input.event_source,
+        }
+    }
+}
 
 #[Object]
 impl StatisticsQuery {
@@ -23,15 +40,14 @@ impl StatisticsQuery {
         ctx: &Context<'_>,
         cluster: ID,
         time: Option<NaiveDateTime>,
-        first_event_id: Option<i64>,
-        last_event_id: Option<i64>,
+        event_range: Option<EventRangeInput>,
     ) -> Result<JsonValue> {
-        match (time, first_event_id, last_event_id) {
-            (Some(_), None, None) | (None, Some(_), Some(_)) => {
+        match (&time, &event_range) {
+            (Some(_), None) | (None, Some(_)) => {
                 let cluster = cluster.as_str().parse()?;
                 let db = ctx.data::<Database>()?;
                 let result = db
-                    .get_column_statistics(cluster, time, first_event_id, last_event_id)
+                    .get_column_statistics(cluster, time, event_range.map(|e| vec![e.into()]))
                     .await?;
                 Ok(serde_json::to_value(result)?)
             }
