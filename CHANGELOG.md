@@ -11,6 +11,16 @@ Versioning](https://semver.org/spec/v2.0.0.html).
 
 - Updated `ip2location` to 0.4.2.
 - Updated `review-database` to 0.7.0.
+- GraphQL API `columnStatistics`: This query's parameters have been modified to
+  support event source.
+  - Replaced separate firstEventId: Int and lastEventId: Int parameters with a
+    single eventRange: EventRangeInput parameter.
+  - EventRangeInput is a new input type that includes the following required
+    fields:
+    - firstEventId: !Int (equivalent to the previous firstEventId parameter).
+    - lastEventId: !Int (equivalent to the previous lastEventId parameter).
+    - eventSource: !String (a new required field indicating the source of the
+      events).
 
 ## [0.2.0] - 2023-04-27
 
