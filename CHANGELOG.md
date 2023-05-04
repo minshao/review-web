@@ -9,7 +9,7 @@ Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
-- Add `rankedOutliers`
+- Added a GraphQL query, `rankedOutliers`, to retrieve outliers.
 
 ## [0.4.0] - 2023-05-04
 
