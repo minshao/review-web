@@ -77,8 +77,25 @@ pub trait AgentManager: Send + Sync {
 type BoxedAgentManager = Box<dyn AgentManager>;
 
 pub trait CertManager: Send + Sync {
+    /// Returns the certificate path.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the certificate path cannot be determined.
     fn cert_path(&self) -> Result<PathBuf, anyhow::Error>;
+
+    /// Returns the key path.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the key path cannot be determined.
     fn key_path(&self) -> Result<PathBuf, anyhow::Error>;
+
+    /// Updates the certificate and key.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the certificate and key cannot be updated.
     fn update_certificate(
         &self,
         cert: String,

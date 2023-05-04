@@ -39,6 +39,10 @@ pub struct ServerConfig {
 }
 
 /// Runs a web server.
+///
+/// # Panics
+///
+/// Panics if binding to the address fails.
 pub async fn serve<A>(
     config: ServerConfig,
     db: Database,

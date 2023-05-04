@@ -29,6 +29,11 @@ impl Claims {
     }
 }
 
+/// Creates a JWT token with the given username and role.
+///
+/// # Errors
+///
+/// Returns an error if the JWT locks are poisoned or if the JWT secret cannot be read.
 pub fn create_token(username: String, role: String) -> Result<(String, NaiveDateTime), AuthError> {
     let expires_in = JWT_EXPIRES_IN
         .read()
@@ -50,6 +55,11 @@ pub fn create_token(username: String, role: String) -> Result<(String, NaiveDate
     Ok((token, expiration_time))
 }
 
+/// Decodes a JWT token and returns the claims.
+///
+/// # Errors
+///
+/// Returns an error if the JWT lock is poisoned or if the JWT secret cannot be read.
 pub fn decode_token(token: &str) -> anyhow::Result<Claims> {
     let jwt_secret = JWT_SECRET
         .read()
@@ -62,6 +72,11 @@ pub fn decode_token(token: &str) -> anyhow::Result<Claims> {
     Ok(token_data.claims)
 }
 
+/// Updates the JWT expiration time.
+///
+/// # Errors
+///
+/// Returns an error if the JWT lock is poisoned.
 pub fn update_jwt_expires_in(new_expires_in: i64) -> anyhow::Result<()> {
     JWT_EXPIRES_IN
         .write()
@@ -71,6 +86,11 @@ pub fn update_jwt_expires_in(new_expires_in: i64) -> anyhow::Result<()> {
         .map_err(|e| anyhow!("jwt_expires_in: {}", e))
 }
 
+/// Updates the JWT secret.
+///
+/// # Errors
+///
+/// Returns an error if the JWT lock is poisoned.
 pub fn update_jwt_secret(new_secret: Vec<u8>) -> anyhow::Result<()> {
     JWT_SECRET
         .write()
@@ -80,6 +100,12 @@ pub fn update_jwt_secret(new_secret: Vec<u8>) -> anyhow::Result<()> {
         .map_err(|e| anyhow!("jwt_secret: {}", e))
 }
 
+/// Validates a JWT token and returns the username and role.
+///
+/// # Errors
+///
+/// Returns an error if the JWT lock is poisoned, if the JWT secret cannot be read, or if the token
+/// data is invalid.
 pub fn validate_token(
     store: &Arc<Store>,
     token: &str,

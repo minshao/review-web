@@ -333,6 +333,12 @@ impl AccountMutation {
     }
 }
 
+/// Returns the expiration time according to the account policy.
+///
+/// # Errors
+///
+/// Returns an error if the account policy is not found or the value is
+/// corrupted.
 pub fn expiration_time(store: &Arc<Store>) -> Result<i64> {
     let map = store.account_policy_map();
     let value = map
@@ -344,6 +350,12 @@ pub fn expiration_time(store: &Arc<Store>) -> Result<i64> {
     Ok(exp)
 }
 
+/// Initializes the account policy with the given expiration time.
+///
+/// # Errors
+///
+/// Returns an error if the value cannot be serialized or the underlaying store
+/// fails to put the value.
 pub fn init_expiration_time(store: &Arc<Store>, time: i64) -> anyhow::Result<()> {
     let map = store.account_policy_map();
     let policy = AccountPolicy {

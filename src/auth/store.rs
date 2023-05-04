@@ -4,6 +4,12 @@ use anyhow::{anyhow, bail, Result};
 use bincode::Options;
 use std::{collections::HashSet, sync::Arc};
 
+/// Inserts a token into the store.
+///
+/// # Errors
+///
+/// Returns an error if the tokens in the store are invalid, if the token cannot be serialized, or
+/// if the store cannot be accessed.
 pub fn insert_token(store: &Arc<Store>, token: &str, username: &str) -> Result<()> {
     let map = store.access_token_map();
     let tokens = map.get(username.as_bytes())?;
@@ -21,6 +27,12 @@ pub fn insert_token(store: &Arc<Store>, token: &str, username: &str) -> Result<(
     Ok(())
 }
 
+/// Revokes a token from the store.
+///
+/// # Errors
+///
+/// Returns an error if the tokens in the store are invalid, if the token cannot be serialized, or
+/// if the store cannot be accessed.
 pub fn revoke_token(store: &Arc<Store>, token: &str) -> Result<()> {
     let decoded_token = super::decode_token(token)?;
     let username = decoded_token.sub;

@@ -271,6 +271,11 @@ fn load(
     super::super::load(&map, after, before, first, last, NodeTotalCount)
 }
 
+/// Returns the node settings.
+///
+/// # Errors
+///
+/// Returns an error if the node settings could not be retrieved.
 pub fn get_node_settings(db: &Arc<Store>) -> Result<Vec<Setting>> {
     let map = db.node_map();
     let mut output = Vec::new();
