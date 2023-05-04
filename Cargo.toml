@@ -9,7 +9,7 @@ async-graphql = { version = "5", features = ["chrono"] }
 async-graphql-axum = "5"
 async-trait = "0.1"
 axum = { version = "0.6", features = ["headers", "macros"] }
-axum-server = { version = "0.4", features = ["tls-rustls"] }
+axum-server = { version = "0.5", features = ["tls-rustls"] }
 bincode = "1"
 chrono = { version = "0.4", default_features = false, features = ["serde"] }
 data-encoding = "2"
