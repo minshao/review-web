@@ -19,7 +19,7 @@ Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [0.4.0] - 2023-05-04
 
-### Channged
+### Changed
 
 - Updated `review-database` to 0.7.1.
 
@@ -52,7 +52,7 @@ Versioning](https://semver.org/spec/v2.0.0.html).
 
 - An initial version.
 
-[Unreleased]: https://github.com/petabi/review-web/compare/0.4.1...0.5.0
+[Unreleased]: https://github.com/petabi/review-web/compare/0.4.1...main
 [0.4.1]: https://github.com/petabi/review-web/compare/0.4.0...0.4.1
 [0.4.0]: https://github.com/petabi/review-web/compare/0.3.0...0.4.0
 [0.3.0]: https://github.com/petabi/review-web/compare/0.2.0...0.3.0
