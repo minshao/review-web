@@ -44,10 +44,9 @@ impl AccountQuery {
         .or(RoleGuard::new(super::Role::SecurityAdministrator))")]
     async fn account(&self, ctx: &Context<'_>, username: String) -> Result<Account> {
         let map = ctx.data::<Arc<Store>>()?.account_map();
-        let value = map
+        let inner = map
             .get(&username)?
             .ok_or_else::<async_graphql::Error, _>(|| "User not found".into())?;
-        let inner = bincode::DefaultOptions::new().deserialize::<types::Account>(value.as_ref())?;
 
         Ok(Account { inner })
     }
@@ -138,8 +137,8 @@ impl AccountMutation {
         allow_access_from: Option<Vec<String>>,
         max_parallel_sessions: Option<u32>,
     ) -> Result<String> {
-        let map = ctx.data::<Arc<Store>>()?.account_map();
-        if map.get(&username)?.is_some() {
+        let table = ctx.data::<Arc<Store>>()?.account_map();
+        if table.contains(&username)? {
             return Err("account already exists".into());
         }
         let salted_password = SaltedPassword::new(&password)?;
@@ -149,19 +148,19 @@ impl AccountMutation {
         } else {
             None
         };
-        let value = bincode::DefaultOptions::new().serialize(&(
-            &username,
-            salted_password,
-            database::Role::from(role),
+        let account = types::Account {
+            username: username.clone(),
+            password: salted_password,
+            role: database::Role::from(role),
             name,
             department,
-            Utc::now(),
-            None as Option<DateTime<Utc>>,
+            creation_time: Utc::now(),
+            last_signin_time: None as Option<DateTime<Utc>>,
             allow_access_from,
             max_parallel_sessions,
-            PasswordHashAlgorithm::Pbkdf2HmacSha512,
-        ))?;
-        map.put(&username, &value)?;
+            password_hash_algorithm: PasswordHashAlgorithm::Pbkdf2HmacSha512,
+        };
+        table.put(&account)?;
         Ok(username)
     }
 
@@ -230,7 +229,7 @@ impl AccountMutation {
         let max_parallel_sessions = max_parallel_sessions.map(|m| (m.old, m.new));
 
         let map = ctx.data::<Arc<Store>>()?.account_map();
-        map.update_account(
+        map.update(
             username.as_bytes(),
             &password,
             role,
@@ -251,18 +250,15 @@ impl AccountMutation {
     ) -> Result<AuthPayload> {
         let store = ctx.data::<Arc<Store>>()?;
         let account_map = store.account_map();
-        let value = account_map
+        let mut account = account_map
             .get(&username)?
             .ok_or_else::<async_graphql::Error, _>(|| "incorrect username or password".into())?;
-        let mut account =
-            bincode::DefaultOptions::new().deserialize::<types::Account>(value.as_ref())?;
 
         if account.password.is_match(&password) {
             let (token, expiration_time) =
                 create_token(account.username.clone(), account.role.to_string())?;
             account.last_signin_time = Some(Utc::now());
-            let value = bincode::DefaultOptions::new().serialize(&account)?;
-            account_map.put(&username, &value)?;
+            account_map.put(&account)?;
             insert_token(store, &token, &username)?;
 
             Ok(AuthPayload {
@@ -514,8 +510,8 @@ fn load(
 /// fails to generate random bytes for password.
 pub fn set_initial_admin_password(store: &Store) -> anyhow::Result<()> {
     let map = store.account_map();
-    let (key, value) = initial_credential()?;
-    map.insert(&key, &value)
+    let account = initial_credential()?;
+    map.insert(&account)
 }
 
 /// Resets the administrator password to the initial value.
@@ -525,8 +521,8 @@ pub fn set_initial_admin_password(store: &Store) -> anyhow::Result<()> {
 /// This function returns an error if it fails to generate random bytes for password.
 pub fn reset_admin_password(store: &Store) -> anyhow::Result<()> {
     let map = store.account_map();
-    let (username, value) = initial_credential()?;
-    map.put(&username, &value)
+    let account = initial_credential()?;
+    map.put(&account)
 }
 
 /// Returns the initial administrator username and salted password.
@@ -534,7 +530,7 @@ pub fn reset_admin_password(store: &Store) -> anyhow::Result<()> {
 /// # Errors
 ///
 /// This function returns an error if it fails to generate random bytes for password.
-fn initial_credential() -> anyhow::Result<(String, Vec<u8>)> {
+fn initial_credential() -> anyhow::Result<types::Account> {
     const INITIAL_ADMINISTRATOR_ID: &str = "admin";
     const INITIAL_ADMINISTRATOR_PASSWORD: &str = "admin";
 
@@ -553,8 +549,7 @@ fn initial_credential() -> anyhow::Result<(String, Vec<u8>)> {
         password_hash_algorithm: review_database::types::PasswordHashAlgorithm::default(),
     };
 
-    let value = bincode::DefaultOptions::new().serialize(&initial_account)?;
-    Ok((initial_account.username, value))
+    Ok(initial_account)
 }
 
 #[cfg(test)]

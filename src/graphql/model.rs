@@ -941,6 +941,7 @@ async fn load(
                 id: model.id,
                 name: model.name,
                 data_source_id: model.data_source_id,
+                classification_id: model.classification_id,
             }
             .into(),
         )
