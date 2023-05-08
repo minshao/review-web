@@ -9,7 +9,7 @@ Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
-- Updated review-database to 0.8.0-alpha.1. (TODO: update to 0.8.0 before release)
+- Updated review-database to 0.8.0-alpha.2. (TODO: update to 0.8.0 before release)
 
 ## [0.4.1] - 2023-05-05
 
