@@ -9,7 +9,7 @@ Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
-- Added `kind` within the return values of `dataSourceList`.
+- Added `kind` field to the return values of `dataSourceList` API.
 
 ### Changed
 
@@ -17,6 +17,7 @@ Versioning](https://semver.org/spec/v2.0.0.html).
   been removed from the `AuthPayload` return object. This is due to redundancy
   as the caller of `signIn` or `refreshToken` already possesses knowledge of
   the username.
+- Updated review-database to 0.9.0.
 
 ## [0.5.0] - 2023-05-08
 

@@ -91,7 +91,7 @@ enum Event {
     TorConnection(TorConnection),
 
     /// DGA (Domain Generation Algorithm) generated hostname in HTTP request message
-    DomainGenerationAlgorithm(Box<DomainGenerationAlgorithm>),
+    DomainGenerationAlgorithm(DomainGenerationAlgorithm),
 }
 
 impl From<database::Event> for Event {
@@ -105,7 +105,7 @@ impl From<database::Event> for Event {
             }
             database::Event::TorConnection(event) => Event::TorConnection(event.into()),
             database::Event::DomainGenerationAlgorithm(event) => {
-                Event::DomainGenerationAlgorithm(Box::new((*event).into()))
+                Event::DomainGenerationAlgorithm(event.into())
             }
         }
     }
@@ -1232,12 +1232,24 @@ mod tests {
     fn event_message_at(timestamp: DateTime<Utc>, src: u32, dst: u32) -> EventMessage {
         let fields = DnsEventFields {
             source: "collector1".to_string(),
+            session_end_time: timestamp,
             src_addr: Ipv4Addr::from(src).into(),
             src_port: 10000,
             dst_addr: Ipv4Addr::from(dst).into(),
             dst_port: 53,
             proto: 17,
             query: "domain".into(),
+            answer: Vec::new(),
+            trans_id: 0,
+            rtt: 0,
+            qclass: 0,
+            qtype: 0,
+            rcode: 0,
+            aa_flag: false,
+            tc_flag: false,
+            rd_flag: false,
+            ra_flag: false,
+            ttl: Vec::new(),
             confidence: 0.8,
         };
         EventMessage {
