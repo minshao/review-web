@@ -8,8 +8,7 @@ use bincode::Options;
 use chrono::{DateTime, NaiveDateTime, TimeZone, Utc};
 use review_database::{
     self as database,
-    types::PasswordHashAlgorithm,
-    types::{self, SaltedPassword},
+    types::{self},
     IterableMap, MapIterator, Store, Table,
 };
 use serde::{Deserialize, Serialize};
@@ -141,25 +140,21 @@ impl AccountMutation {
         if table.contains(&username)? {
             return Err("account already exists".into());
         }
-        let salted_password = SaltedPassword::new(&password)?;
         let allow_access_from = if let Some(ipaddrs) = allow_access_from {
             let ipaddrs = strings_to_ipaddrs(&ipaddrs)?;
             Some(ipaddrs)
         } else {
             None
         };
-        let account = types::Account {
-            username: username.clone(),
-            password: salted_password,
-            role: database::Role::from(role),
+        let account = types::Account::new(
+            &username,
+            &password,
+            database::Role::from(role),
             name,
             department,
-            creation_time: Utc::now(),
-            last_signin_time: None as Option<DateTime<Utc>>,
             allow_access_from,
             max_parallel_sessions,
-            password_hash_algorithm: PasswordHashAlgorithm::Pbkdf2HmacSha512,
-        };
+        )?;
         table.put(&account)?;
         Ok(username)
     }
@@ -254,10 +249,10 @@ impl AccountMutation {
             .get(&username)?
             .ok_or_else::<async_graphql::Error, _>(|| "incorrect username or password".into())?;
 
-        if account.password.is_match(&password) {
+        if account.verify_password(&password) {
             let (token, expiration_time) =
                 create_token(account.username.clone(), account.role.to_string())?;
-            account.last_signin_time = Some(Utc::now());
+            account.update_last_signin_time();
             account_map.put(&account)?;
             insert_token(store, &token, &username)?;
 
@@ -383,11 +378,11 @@ impl Account {
     }
 
     async fn creation_time(&self) -> DateTime<Utc> {
-        self.inner.creation_time
+        self.inner.creation_time()
     }
 
     async fn last_signin_time(&self) -> Option<DateTime<Utc>> {
-        self.inner.last_signin_time
+        self.inner.last_signin_time()
     }
 
     async fn allow_access_from(&self) -> Option<Vec<String>> {
@@ -531,20 +526,15 @@ fn initial_credential() -> anyhow::Result<types::Account> {
     const INITIAL_ADMINISTRATOR_ID: &str = "admin";
     const INITIAL_ADMINISTRATOR_PASSWORD: &str = "admin";
 
-    let salted_password = SaltedPassword::new(INITIAL_ADMINISTRATOR_PASSWORD)?;
-
-    let initial_account = review_database::types::Account {
-        username: INITIAL_ADMINISTRATOR_ID.to_string(),
-        password: salted_password,
-        role: database::Role::SystemAdministrator,
-        name: "System Administrator".to_owned(),
-        department: String::new(),
-        creation_time: Utc::now(),
-        last_signin_time: None,
-        allow_access_from: None,
-        max_parallel_sessions: None,
-        password_hash_algorithm: review_database::types::PasswordHashAlgorithm::default(),
-    };
+    let initial_account = review_database::types::Account::new(
+        INITIAL_ADMINISTRATOR_ID,
+        INITIAL_ADMINISTRATOR_PASSWORD,
+        database::Role::SystemAdministrator,
+        "System Administrator".to_owned(),
+        String::new(),
+        None,
+        None,
+    )?;
 
     Ok(initial_account)
 }
