@@ -302,7 +302,8 @@ mod tests {
                 }"#,
             )
             .await;
-        assert_eq!(res.data.to_string(), r#"{insertTrafficFilterRules: 2}"#);
+        // This is considered duplicate since review-database 0.11.0.
+        assert!(res.is_err());
 
         let res: async_graphql::Response = schema
             .execute(

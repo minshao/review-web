@@ -5,12 +5,20 @@ file is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and
 this project adheres to [Semantic
 Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.8.0] - 2023-05-18
+
+### Added
+
+- Extended `HttpThreat` object in the GraphQL API:
+  - The `HttpThreat` object now exposes additional fields which encompass all
+    the fields present in an HTTP request. Details of these additional fields
+    can be found in the updated schema.
+  - Introduced a new field, matched_to, within the `HttpThreat` object. This
+    field presents all the patterns that correspond with the HTTP request.
 
 ### Changed
 
-- Expand `HttpThreat` fields to use all of it's original fields and
-  add `matched_to` field to contain the matched patterns.
+- Updated review-database to 0.11.0.
 
 ## [0.7.0] - 2023-05-16
 
@@ -85,6 +93,7 @@ Versioning](https://semver.org/spec/v2.0.0.html).
 
 - An initial version.
 
+[0.8.0]: https://github.com/petabi/review-web/compare/0.7.0...0.8.0
 [0.7.0]: https://github.com/petabi/review-web/compare/0.6.0...0.7.0
 [0.6.0]: https://github.com/petabi/review-web/compare/0.5.0...0.6.0
 [0.5.0]: https://github.com/petabi/review-web/compare/0.4.1...0.5.0
