@@ -5,6 +5,15 @@ file is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and
 this project adheres to [Semantic
 Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+
+- Updated review-database to 0.12.0-alpha.1.
+- Starting from this version, the policy field for TimeSeries data will be set
+  to the same value as the source field. For other data types, the policy field
+  will be set to null.
+
 ## [0.8.1] - 2023-05-18
 
 ### Changed
@@ -103,6 +112,7 @@ Versioning](https://semver.org/spec/v2.0.0.html).
 
 - An initial version.
 
+[Unreleased]: https://github.com/petabi/review-web/compare/0.8.1...main
 [0.8.1]: https://github.com/petabi/review-web/compare/0.8.0...0.8.1
 [0.8.0]: https://github.com/petabi/review-web/compare/0.7.0...0.8.0
 [0.7.0]: https://github.com/petabi/review-web/compare/0.6.0...0.7.0
