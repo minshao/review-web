@@ -5,14 +5,15 @@ file is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and
 this project adheres to [Semantic
 Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.8.1] - 2023-05-18
 
 ### Changed
 
-- change to use `host_id` instead of `agent_id@host_id` to manage
-  traffic filtering rules.
-- change to send empty traffic filtering rules to `piglet` to clear
-  the applied rules.
+- The `update_traffic_filter_rules` function has been updated to explicitly
+  take a `host_id` as an argument, replacing the previous `agent_id@host_id`
+  argument format.
+- Allows the clearing of filtering rules at an agent level by sending an empty
+  rule set to the agent.
 
 ## [0.8.0] - 2023-05-18
 
@@ -102,6 +103,7 @@ Versioning](https://semver.org/spec/v2.0.0.html).
 
 - An initial version.
 
+[0.8.1]: https://github.com/petabi/review-web/compare/0.8.0...0.8.1
 [0.8.0]: https://github.com/petabi/review-web/compare/0.7.0...0.8.0
 [0.7.0]: https://github.com/petabi/review-web/compare/0.6.0...0.7.0
 [0.6.0]: https://github.com/petabi/review-web/compare/0.5.0...0.6.0
