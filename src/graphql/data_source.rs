@@ -44,7 +44,6 @@ pub(super) struct DataSourceInsertInput {
     server_name: Option<String>,
     address: Option<String>,
     data_type: DataType,
-    policy: u32,
     source: Option<String>,
     kind: Option<String>,
     description: String,
@@ -81,7 +80,6 @@ impl TryFrom<DataSourceInsertInput> for database::DataSource {
             server_name,
             address,
             data_type,
-            policy: input.policy,
             source: input.source.unwrap_or(String::new()),
             kind: input.kind,
             description: input.description,
@@ -103,7 +101,7 @@ impl DataSourceMutation {
     ) -> Result<ID> {
         let value: database::DataSource = input.try_into()?;
 
-        validate_policy(ctx, value.policy, value.data_type)?;
+        validate_policy(ctx, &value.source, value.data_type)?;
 
         let map = ctx.data::<Arc<Store>>()?.data_source_map();
 
@@ -158,12 +156,12 @@ impl DataSource {
         &self.inner.name
     }
 
-    /// The server_name of the data source
+    /// The server_name of the data source.
     async fn server_name(&self) -> &str {
         &self.inner.server_name
     }
 
-    /// The socket address of the data source
+    /// The socket address of the data source.
     async fn address(&self) -> String {
         self.inner.address.to_string()
     }
@@ -174,8 +172,12 @@ impl DataSource {
     }
 
     /// The policy of the data source.
-    async fn policy(&self) -> ID {
-        ID(self.inner.policy.to_string())
+    async fn policy(&self) -> Option<ID> {
+        if DataType::TimeSeries == self.inner.data_type.into() {
+            Some(ID(self.inner.source.clone()))
+        } else {
+            None
+        }
     }
 
     /// The source for the data source in giganto.
@@ -217,7 +219,6 @@ struct DataSourceUpdateInput {
     server_name: Option<String>,
     address: Option<String>,
     data_type: Option<DataType>,
-    policy: Option<u32>,
     source: Option<String>,
     kind: Option<String>,
     description: Option<String>,
@@ -248,9 +249,7 @@ impl IndexedMapUpdate for DataSourceUpdateInput {
         if let Some(v) = self.data_type {
             value.data_type = v.into();
         }
-        if let Some(v) = self.policy {
-            value.policy = v;
-        }
+
         if let Some(v) = self.source.as_deref() {
             value.source.clear();
             value.source.push_str(v);
@@ -297,11 +296,7 @@ impl IndexedMapUpdate for DataSourceUpdateInput {
                 return false;
             }
         }
-        if let Some(v) = self.policy {
-            if value.policy != v {
-                return false;
-            }
-        }
+
         if let Some(v) = self.source.as_deref() {
             if value.source != v {
                 return false;
@@ -348,9 +343,10 @@ fn load(
     >(&map, after, before, first, last, DataSourceTotalCount)
 }
 
-fn validate_policy(ctx: &Context<'_>, policy: u32, kind: database::DataType) -> Result<()> {
+fn validate_policy(ctx: &Context<'_>, policy: &str, kind: database::DataType) -> Result<()> {
     match kind {
         database::DataType::TimeSeries => {
+            let policy = policy.parse::<u32>()?;
             let map = ctx.data::<Arc<Store>>()?.sampling_policy_map();
             let Some(_value) = map.get_by_id(policy)? else {
                 return Err("no such sampling policy".into())
@@ -376,7 +372,7 @@ mod tests {
         let res = schema
             .execute(
                 r#"mutation {
-                    insertDataSource(input: { name: "d1", dataType: "LOG", policy: 1, source: "test", kind: "Dns", description: "" })
+                    insertDataSource(input: { name: "d1", dataType: "LOG", source: "test", kind: "Dns", description: "" })
                 }"#,
             )
             .await;
