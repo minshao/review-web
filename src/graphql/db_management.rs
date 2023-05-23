@@ -1,6 +1,6 @@
 use super::{Role, RoleGuard};
 use async_graphql::{Context, Object, Result};
-use review_database::Store;
+use review_database::{backup, Store};
 use std::sync::Arc;
 
 #[derive(Default)]
@@ -11,10 +11,8 @@ impl DbManagementMutation {
     #[graphql(guard = "RoleGuard::new(Role::SystemAdministrator)
         .or(RoleGuard::new(Role::SecurityAdministrator))")]
     async fn backup(&self, ctx: &Context<'_>, num_of_backups_to_keep: u32) -> Result<bool> {
-        Ok(ctx
-            .data::<Arc<Store>>()?
-            .backup(num_of_backups_to_keep)
-            .is_ok())
+        let store = ctx.data::<Arc<Store>>()?;
+        Ok(backup::create(store, num_of_backups_to_keep).is_ok())
     }
 
     #[graphql(guard = "RoleGuard::new(Role::SystemAdministrator)
