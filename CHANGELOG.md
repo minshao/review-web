@@ -7,9 +7,11 @@ Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
-### Changed
+### Added
 
-- Add `confidence` field to `DomainGenerationAlgorithm` event.
+- The `DomainGenerationAlgorithm` event in our `GraphQL` API query now includes
+  a confidence field. This field will allow users to access and gauge the
+  predictive certainty of the output.
 
 ## [0.9.0] - 2023-05-22
 
@@ -118,6 +120,7 @@ Versioning](https://semver.org/spec/v2.0.0.html).
 
 - An initial version.
 
+[Unreleased]: https://github.com/petabi/review-web/compare/0.9.0...main
 [0.9.0]: https://github.com/petabi/review-web/compare/0.8.1...0.9.0
 [0.8.1]: https://github.com/petabi/review-web/compare/0.8.0...0.8.1
 [0.8.0]: https://github.com/petabi/review-web/compare/0.7.0...0.8.0
