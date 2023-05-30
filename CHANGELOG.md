@@ -5,6 +5,22 @@ file is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and
 this project adheres to [Semantic
 Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- To enhance security and traceability, we have implemented a new logging
+  feature which now writes a log message during specific user authentication
+  activities.
+  - User Sign-in Logging: A log message will be automatically generated each
+    time a user signs in successfully.
+  - User Sign-out Logging: In addition to sign-ins, we now log user sign-out
+    events.
+  - Sign-in Failure Logging: In an effort to help detect and mitigate potential
+    security issues, we are now logging failed sign-in attempts. This includes
+    the user identification (if applicable) and the reason for failure (e.g.,
+    incorrect password, non-existent user ID, etc.).
+
 ## [0.9.1] - 2023-05-25
 
 ### Added
@@ -151,6 +167,7 @@ Versioning](https://semver.org/spec/v2.0.0.html).
 
 - An initial version.
 
+[Unreleased]: https://github.com/petabi/review-web/compare/0.9.1...main
 [0.9.1]: https://github.com/petabi/review-web/compare/0.9.0...0.9.1
 [0.9.0]: https://github.com/petabi/review-web/compare/0.8.1...0.9.0
 [0.8.1]: https://github.com/petabi/review-web/compare/0.8.0...0.8.1
