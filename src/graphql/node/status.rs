@@ -9,10 +9,8 @@ use async_graphql::{
 use bincode::Options;
 use chrono::Utc;
 use oinq::RequestCode;
-use review_database::Store;
 use roxy::ResourceUsage;
 use std::collections::{HashMap, HashSet};
-use std::sync::Arc;
 
 #[Object]
 impl NodeStatusQuery {
@@ -91,8 +89,8 @@ async fn load(
     let review_usage = roxy::resource_usage().await;
     let review_hostname = roxy::hostname();
 
-    let db = ctx.data::<Arc<Store>>()?;
-    let map = db.node_map();
+    let store = crate::graphql::get_store(ctx).await?;
+    let map = store.node_map();
     let (node_list, has_previous, has_next): (Vec<(String, Node)>, bool, bool) =
         super::super::load_nodes(&map, after, before, first, last)?;
 

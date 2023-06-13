@@ -106,10 +106,7 @@ pub fn update_jwt_secret(new_secret: Vec<u8>) -> anyhow::Result<()> {
 ///
 /// Returns an error if the JWT lock is poisoned, if the JWT secret cannot be read, or if the token
 /// data is invalid.
-pub fn validate_token(
-    store: &Arc<Store>,
-    token: &str,
-) -> Result<(String, database::Role), AuthError> {
+pub fn validate_token(store: &Store, token: &str) -> Result<(String, database::Role), AuthError> {
     let jwt_secret = JWT_SECRET
         .read()
         .map_err(|e| AuthError::ReadJwtSecret(e.to_string()))?;

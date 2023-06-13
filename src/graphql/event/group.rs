@@ -5,7 +5,7 @@ use async_graphql::{Context, Object, OutputType, Result, SimpleObject};
 use review_database::{
     self as database,
     types::{EventCategory, FromKeyValue},
-    Direction, Event, EventFilter, IndexedMultimap, IterableMap, Store,
+    Direction, Event, EventFilter, IndexedMultimap, IterableMap,
 };
 use std::{
     collections::HashMap,
@@ -31,7 +31,7 @@ impl EventGroupQuery {
         filter: EventListFilterInput,
         #[graphql(validator(minimum = 1))] first: i32,
     ) -> Result<EventCounts<u8>> {
-        let (values, counts) = count_events(ctx, &filter, Event::count_category, first)?;
+        let (values, counts) = count_events(ctx, &filter, Event::count_category, first).await?;
         let values = values.into_iter().map(EventCategory::into).collect();
         Ok(EventCounts { values, counts })
     }
@@ -48,7 +48,7 @@ impl EventGroupQuery {
         filter: EventListFilterInput,
         #[graphql(validator(minimum = 1))] first: i32,
     ) -> Result<EventCounts<String>> {
-        let (values, counts) = count_events(ctx, &filter, Event::count_country, first)?;
+        let (values, counts) = count_events(ctx, &filter, Event::count_country, first).await?;
         Ok(EventCounts { values, counts })
     }
 
@@ -64,7 +64,7 @@ impl EventGroupQuery {
         filter: EventListFilterInput,
         #[graphql(validator(minimum = 1))] first: i32,
     ) -> Result<EventCounts<String>> {
-        let (values, counts) = count_events(ctx, &filter, Event::count_ip_address, first)?;
+        let (values, counts) = count_events(ctx, &filter, Event::count_ip_address, first).await?;
         let values = values.into_iter().map(|v| v.to_string()).collect();
         Ok(EventCounts { values, counts })
     }
@@ -84,7 +84,8 @@ impl EventGroupQuery {
         filter: EventListFilterInput,
         #[graphql(validator(minimum = 1))] first: i32,
     ) -> Result<EventCounts<String>> {
-        let (values, counts) = count_events(ctx, &filter, Event::count_ip_address_pair, first)?;
+        let (values, counts) =
+            count_events(ctx, &filter, Event::count_ip_address_pair, first).await?;
         let values = values
             .into_iter()
             .map(|(src, dst)| {
@@ -114,7 +115,7 @@ impl EventGroupQuery {
         #[graphql(validator(minimum = 1))] first: i32,
     ) -> Result<EventCounts<String>> {
         let (values, counts) =
-            count_events(ctx, &filter, Event::count_ip_address_pair_and_kind, first)?;
+            count_events(ctx, &filter, Event::count_ip_address_pair_and_kind, first).await?;
         let values = values
             .into_iter()
             .map(|(src, dst, kind)| {
@@ -141,7 +142,8 @@ impl EventGroupQuery {
         filter: EventListFilterInput,
         #[graphql(validator(minimum = 1))] first: i32,
     ) -> Result<EventCounts<String>> {
-        let (values, counts) = count_events(ctx, &filter, Event::count_src_ip_address, first)?;
+        let (values, counts) =
+            count_events(ctx, &filter, Event::count_src_ip_address, first).await?;
         let values = values.into_iter().map(|v| v.to_string()).collect();
         Ok(EventCounts { values, counts })
     }
@@ -158,7 +160,8 @@ impl EventGroupQuery {
         filter: EventListFilterInput,
         #[graphql(validator(minimum = 1))] first: i32,
     ) -> Result<EventCounts<String>> {
-        let (values, counts) = count_events(ctx, &filter, Event::count_dst_ip_address, first)?;
+        let (values, counts) =
+            count_events(ctx, &filter, Event::count_dst_ip_address, first).await?;
         let values = values.into_iter().map(|v| v.to_string()).collect();
         Ok(EventCounts { values, counts })
     }
@@ -175,7 +178,7 @@ impl EventGroupQuery {
         filter: EventListFilterInput,
         #[graphql(validator(minimum = 1))] first: i32,
     ) -> Result<EventCounts<String>> {
-        let (values, counts) = count_events(ctx, &filter, Event::count_kind, first)?;
+        let (values, counts) = count_events(ctx, &filter, Event::count_kind, first).await?;
         Ok(EventCounts { values, counts })
     }
 
@@ -191,7 +194,7 @@ impl EventGroupQuery {
         filter: EventListFilterInput,
         #[graphql(validator(minimum = 1))] first: i32,
     ) -> Result<EventCounts<u8>> {
-        let (values, counts) = count_events(ctx, &filter, Event::count_level, first)?;
+        let (values, counts) = count_events(ctx, &filter, Event::count_level, first).await?;
         let values = values.into_iter().map(NonZeroU8::get).collect();
         Ok(EventCounts { values, counts })
     }
@@ -208,7 +211,7 @@ impl EventGroupQuery {
         filter: EventListFilterInput,
         #[graphql(validator(minimum = 1))] first: i32,
     ) -> Result<EventCounts<String>> {
-        let (values, counts) = count_events_by_network(ctx, &filter, first)?;
+        let (values, counts) = count_events_by_network(ctx, &filter, first).await?;
         Ok(EventCounts { values, counts })
     }
 
@@ -224,7 +227,8 @@ impl EventGroupQuery {
         filter: EventListFilterInput,
         #[graphql(validator(minimum = 1))] period: i64,
     ) -> Result<Vec<usize>> {
-        let store = ctx.data::<Arc<Store>>()?;
+        let store = crate::graphql::get_store(ctx).await?;
+
         let start = filter
             .start
             .map(|t| i128::from(t.timestamp_nanos()) << 64)
@@ -237,7 +241,7 @@ impl EventGroupQuery {
                 0
             }
         });
-        let filter = from_filter_input(store, &filter)?;
+        let filter = from_filter_input(&store, &filter)?;
         let db = store.events();
         let locator = if filter.has_country() {
             if let Ok(mutex) = ctx.data::<Arc<Mutex<ip2location::DB>>>() {
@@ -297,13 +301,14 @@ type EventCountFn<T> = fn(
     &EventFilter,
 ) -> anyhow::Result<()>;
 
-fn count_events<T>(
+async fn count_events<T>(
     ctx: &Context<'_>,
     filter: &EventListFilterInput,
     count: EventCountFn<T>,
     first: i32,
 ) -> Result<(Vec<T>, Vec<usize>)> {
-    let store = ctx.data::<Arc<Store>>()?;
+    let store = crate::graphql::get_store(ctx).await?;
+
     let start = filter
         .start
         .map(|t| i128::from(t.timestamp_nanos()) << 64)
@@ -316,7 +321,7 @@ fn count_events<T>(
             0
         }
     });
-    let filter = from_filter_input(store, filter)?;
+    let filter = from_filter_input(&store, filter)?;
     let db = store.events();
     let locator = if let Ok(mutex) = ctx.data::<Arc<Mutex<ip2location::DB>>>() {
         Some(Arc::clone(mutex))
@@ -353,12 +358,12 @@ fn count_events<T>(
     Ok((values, counts))
 }
 
-fn count_events_by_network(
+async fn count_events_by_network(
     ctx: &Context<'_>,
     filter: &EventListFilterInput,
     first: i32,
 ) -> Result<(Vec<String>, Vec<usize>)> {
-    let store = ctx.data::<Arc<Store>>()?;
+    let store = crate::graphql::get_store(ctx).await?;
     let network_map = store.network_map();
     let networks = load_networks(&network_map)?;
 
@@ -374,7 +379,7 @@ fn count_events_by_network(
             0
         }
     });
-    let filter = from_filter_input(store, filter)?;
+    let filter = from_filter_input(&store, filter)?;
     let db = store.events();
     let locator = if let Ok(mutex) = ctx.data::<Arc<Mutex<ip2location::DB>>>() {
         Some(Arc::clone(mutex))
@@ -463,7 +468,8 @@ mod tests {
     #[tokio::test]
     async fn count_events_by_network() {
         let schema = TestSchema::new().await;
-        let db = schema.event_database();
+        let store = schema.store().await;
+        let db = store.events();
         let ts1 = NaiveDate::from_ymd_opt(2018, 1, 26)
             .unwrap()
             .and_hms_micro_opt(18, 30, 9, 453_829)

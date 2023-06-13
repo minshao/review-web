@@ -2,9 +2,9 @@ use super::{customer::HostNetworkGroup, event::EndpointInput, Role, RoleGuard};
 use anyhow::{anyhow, Context as AnyhowContext};
 use async_graphql::{Context, Enum, InputObject, Object, Result, SimpleObject, ID};
 use bincode::Options;
-use review_database::{self as database, Store};
+use review_database::{self as database};
 use serde::{Deserialize, Serialize};
-use std::{collections::HashMap, sync::Arc};
+use std::collections::HashMap;
 
 #[derive(Default)]
 pub(super) struct FilterQuery;
@@ -17,7 +17,8 @@ impl FilterQuery {
         .or(RoleGuard::new(Role::SecurityManager))
         .or(RoleGuard::new(Role::SecurityMonitor))")]
     async fn filter_list(&self, ctx: &Context<'_>) -> Result<Vec<Filter>> {
-        let map = ctx.data::<Arc<Store>>()?.filter_map();
+        let store = crate::graphql::get_store(ctx).await?;
+        let map = store.filter_map();
         let username = ctx.data::<String>()?;
         let mut filters = if let Some(value) = map.get(username.as_bytes())? {
             bincode::DefaultOptions::new()
@@ -39,7 +40,7 @@ impl FilterQuery {
         .or(RoleGuard::new(Role::SecurityManager))
         .or(RoleGuard::new(Role::SecurityMonitor))")]
     async fn filter(&self, ctx: &Context<'_>, name: String) -> Result<Option<Filter>> {
-        let db = ctx.data::<Arc<Store>>()?;
+        let db = crate::graphql::get_store(ctx).await?;
         let username = ctx.data::<String>()?;
         let map = db.filter_map();
         let mut filters = if let Some(value) = map.get(username.as_bytes())? {
@@ -86,7 +87,8 @@ impl FilterMutation {
         learning_methods: Option<Vec<LearningMethod>>,
         confidence: Option<f32>,
     ) -> Result<String> {
-        let map = ctx.data::<Arc<Store>>()?.filter_map();
+        let store = crate::graphql::get_store(ctx).await?;
+        let map = store.filter_map();
         let account = ctx.data::<String>()?;
         let codec = bincode::DefaultOptions::new();
         let endpoints = if let Some(endpoints_input) = endpoints {
@@ -155,7 +157,8 @@ impl FilterMutation {
         ctx: &Context<'_>,
         #[graphql(validator(min_items = 1))] names: Vec<String>,
     ) -> Result<Vec<String>> {
-        let map = ctx.data::<Arc<Store>>()?.filter_map();
+        let store = crate::graphql::get_store(ctx).await?;
+        let map = store.filter_map();
         let username = ctx.data::<String>()?;
         let codec = bincode::DefaultOptions::new();
 
@@ -188,7 +191,8 @@ impl FilterMutation {
     ) -> Result<String> {
         let new = database::Filter::try_from(new)?;
 
-        let map = ctx.data::<Arc<Store>>()?.filter_map();
+        let store = crate::graphql::get_store(ctx).await?;
+        let map = store.filter_map();
         let username = ctx.data::<String>()?;
         let codec = bincode::DefaultOptions::new();
 

@@ -10,6 +10,7 @@ use bincode::Options;
 use review_database::{self as database, Indexable, Indexed, IndexedMapUpdate, IterableMap, Store};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
+use tokio::sync::RwLock;
 
 #[derive(Default)]
 pub(super) struct BlockNetworkQuery;
@@ -34,7 +35,7 @@ impl BlockNetworkQuery {
             before,
             first,
             last,
-            |after, before, first, last| async move { load(ctx, after, before, first, last) },
+            |after, before, first, last| async move { load(ctx, after, before, first, last).await },
         )
         .await
     }
@@ -55,7 +56,7 @@ impl BlockNetworkMutation {
         networks: HostNetworkGroupInput,
         description: String,
     ) -> Result<ID> {
-        let db = ctx.data::<Arc<Store>>()?;
+        let db = ctx.data::<Arc<RwLock<Store>>>()?.read().await;
         let map = db.block_network_map();
         let networks: database::HostNetworkGroup =
             networks.try_into().map_err(|_| "invalid network")?;
@@ -79,7 +80,8 @@ impl BlockNetworkMutation {
         ctx: &Context<'_>,
         #[graphql(validator(min_items = 1))] ids: Vec<ID>,
     ) -> Result<Vec<String>> {
-        let map = ctx.data::<Arc<Store>>()?.block_network_map();
+        let db = ctx.data::<Arc<RwLock<Store>>>()?.read().await;
+        let map = db.block_network_map();
 
         let mut removed = Vec::<String>::with_capacity(ids.len());
         for id in ids {
@@ -108,7 +110,7 @@ impl BlockNetworkMutation {
     ) -> Result<ID> {
         let i = id.as_str().parse::<u32>().map_err(|_| "invalid ID")?;
 
-        let db = ctx.data::<Arc<Store>>()?;
+        let db = super::get_store(ctx).await?;
         let map = db.block_network_map();
         map.update(i, &old, &new)?;
         Ok(id)
@@ -118,9 +120,8 @@ impl BlockNetworkMutation {
     #[graphql(guard = "RoleGuard::new(Role::SystemAdministrator)
         .or(RoleGuard::new(Role::SecurityAdministrator))")]
     async fn apply_block_networks(&self, ctx: &Context<'_>) -> Result<Vec<String>> {
-        let db = ctx.data::<Arc<Store>>()?;
-        let serialized_networks =
-            bincode::DefaultOptions::new().serialize(&get_block_networks(db)?)?;
+        let db = super::get_store(ctx).await?;
+        let serialized_networks = bincode::serialize(&get_block_networks(&db)?)?;
         let agent_manager = ctx.data::<BoxedAgentManager>()?;
         agent_manager
             .broadcast_block_networks(&serialized_networks)
@@ -230,19 +231,20 @@ struct BlockNetworkTotalCount;
 impl BlockNetworkTotalCount {
     /// The total number of edges.
     async fn total_count(&self, ctx: &Context<'_>) -> Result<usize> {
-        let db = ctx.data::<Arc<Store>>()?;
+        let db = ctx.data::<Arc<RwLock<Store>>>()?.read().await;
         Ok(db.block_network_map().count()?)
     }
 }
 
-fn load(
+async fn load(
     ctx: &Context<'_>,
     after: Option<String>,
     before: Option<String>,
     first: Option<usize>,
     last: Option<usize>,
 ) -> Result<Connection<String, BlockNetwork, BlockNetworkTotalCount, EmptyFields>> {
-    let map = ctx.data::<Arc<Store>>()?.block_network_map();
+    let db = super::get_store(ctx).await?;
+    let map = db.block_network_map();
     super::load(&map, after, before, first, last, BlockNetworkTotalCount)
 }
 
@@ -251,7 +253,7 @@ fn load(
 /// # Errors
 ///
 /// Returns an error if the block network database could not be retrieved.
-pub fn get_block_networks(db: &Arc<Store>) -> Result<database::HostNetworkGroup> {
+pub fn get_block_networks(db: &Store) -> Result<database::HostNetworkGroup> {
     let map = db.block_network_map();
     let mut hosts = vec![];
     let mut networks = vec![];

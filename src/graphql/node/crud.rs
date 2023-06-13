@@ -15,10 +15,7 @@ use async_graphql::{
 use bincode::Options;
 use chrono::Utc;
 use review_database::{Indexed, IterableMap, Store};
-use std::{
-    net::{IpAddr, Ipv4Addr, SocketAddr},
-    sync::Arc,
-};
+use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use tracing::error;
 
 #[Object]
@@ -39,7 +36,7 @@ impl NodeQuery {
             before,
             first,
             last,
-            |after, before, first, last| async move { load(ctx, after, before, first, last) },
+            |after, before, first, last| async move { load(ctx, after, before, first, last).await },
         )
         .await
     }
@@ -50,8 +47,8 @@ impl NodeQuery {
     async fn node(&self, ctx: &Context<'_>, id: ID) -> Result<Node> {
         let i = id.as_str().parse::<u32>().map_err(|_| "invalid ID")?;
 
-        let db = ctx.data::<Arc<Store>>()?;
-        let map = db.node_map();
+        let store = crate::graphql::get_store(ctx).await?;
+        let map = store.node_map();
         let Some(value) = map.get_by_id(i)? else {
            return Err("no such node".into())
         };
@@ -110,8 +107,8 @@ impl NodeMutation {
         hog: bool,
     ) -> Result<ID> {
         let (id, customer_id, review) = {
-            let db = ctx.data::<Arc<Store>>()?;
-            let map = db.node_map();
+            let store = crate::graphql::get_store(ctx).await?;
+            let map = store.node_map();
             let customer_id = customer_id
                 .as_str()
                 .parse::<u32>()
@@ -218,8 +215,9 @@ impl NodeMutation {
             (id, customer_id, review)
         };
         if review {
-            let db = ctx.data::<Arc<Store>>()?;
-            if let Ok(networks) = get_customer_networks(db, customer_id) {
+            let store = crate::graphql::get_store(ctx).await?;
+
+            if let Ok(networks) = get_customer_networks(&store, customer_id) {
                 if let Err(e) = broadcast_customer_networks(ctx, &networks).await {
                     error!("failed to broadcast internal networks. {e:?}");
                 }
@@ -238,7 +236,8 @@ impl NodeMutation {
         ctx: &Context<'_>,
         #[graphql(validator(min_items = 1))] ids: Vec<ID>,
     ) -> Result<Vec<String>> {
-        let map = ctx.data::<Arc<Store>>()?.node_map();
+        let store = crate::graphql::get_store(ctx).await?;
+        let map = store.node_map();
 
         let mut removed = Vec::<String>::with_capacity(ids.len());
         for id in ids {
@@ -267,8 +266,8 @@ impl NodeMutation {
         let (review, customer_is_changed, customer_id) = {
             let i = id.as_str().parse::<u32>().map_err(|_| "invalid ID")?;
 
-            let db = ctx.data::<Arc<Store>>()?;
-            let map = db.node_map();
+            let store = crate::graphql::get_store(ctx).await?;
+            let map = store.node_map();
             map.update(i, &old, &new)?;
 
             (
@@ -280,8 +279,9 @@ impl NodeMutation {
 
         if review && customer_is_changed {
             if let Ok(customer_id) = customer_id.as_str().parse::<u32>() {
-                let db = ctx.data::<Arc<Store>>()?;
-                if let Ok(networks) = get_customer_networks(db, customer_id) {
+                let store = crate::graphql::get_store(ctx).await?;
+
+                if let Ok(networks) = get_customer_networks(&store, customer_id) {
                     if let Err(e) = broadcast_customer_networks(ctx, &networks).await {
                         error!("failed to broadcast internal networks. {e:?}");
                     }
@@ -293,15 +293,15 @@ impl NodeMutation {
     }
 }
 
-fn load(
+async fn load(
     ctx: &Context<'_>,
     after: Option<String>,
     before: Option<String>,
     first: Option<usize>,
     last: Option<usize>,
 ) -> Result<Connection<String, Node, NodeTotalCount, EmptyFields>> {
-    let db = ctx.data::<Arc<Store>>()?;
-    let map = db.node_map();
+    let store = crate::graphql::get_store(ctx).await?;
+    let map = store.node_map();
     super::super::load(&map, after, before, first, last, NodeTotalCount)
 }
 
@@ -310,7 +310,7 @@ fn load(
 /// # Errors
 ///
 /// Returns an error if the node settings could not be retrieved.
-pub fn get_node_settings(db: &Arc<Store>) -> Result<Vec<Setting>> {
+pub fn get_node_settings(db: &Store) -> Result<Vec<Setting>> {
     let map = db.node_map();
     let mut output = Vec::new();
     for (_key, value) in map.iter_forward()? {
@@ -424,7 +424,7 @@ fn get_sockaddr(nics: &[Nic], target: &Option<Vec<String>>, port: PortNumber) ->
 ///
 /// Returns an error if the node settings could not be retrieved.
 #[allow(clippy::module_name_repetitions)]
-pub fn get_customer_id_of_review_host(db: &Arc<Store>) -> Result<Option<u32>> {
+pub fn get_customer_id_of_review_host(db: &Store) -> Result<Option<u32>> {
     let map = db.node_map();
     for (_key, value) in map.iter_forward()? {
         let node = bincode::DefaultOptions::new()

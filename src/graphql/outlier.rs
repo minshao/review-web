@@ -1,5 +1,3 @@
-use std::sync::Arc;
-
 use super::{model::Model, slicing, Role, RoleGuard};
 use async_graphql::{
     connection::{query, Connection, Edge, EmptyFields},
@@ -9,7 +7,7 @@ use async_graphql::{
 use bincode::Options;
 use chrono::{offset::LocalResult, DateTime, NaiveDateTime, TimeZone, Utc};
 use num_traits::ToPrimitive;
-use review_database::{types::FromKeyValue, Database, Store};
+use review_database::{types::FromKeyValue, Database};
 
 #[derive(Default)]
 pub(super) struct OutlierMutation;
@@ -23,8 +21,8 @@ impl OutlierMutation {
         #[graphql(validator(min_items = 1))] input: Vec<PreserveOutliersInput>,
     ) -> Result<usize> {
         use bincode::Options;
-
-        let map = ctx.data::<Arc<Store>>()?.outlier_map();
+        let store = super::get_store(ctx).await?;
+        let map = store.outlier_map();
         let mut updated = vec![];
         for outlier_key in input {
             let outlier_id = (outlier_key.id, outlier_key.source.clone());
@@ -140,10 +138,8 @@ async fn load_outliers(
         bincode::DefaultOptions::new().serialize(&model_id)?
     };
 
-    let map = ctx
-        .data::<Arc<Store>>()?
-        .outlier_map()
-        .into_prefix_map(&prefix);
+    let store = crate::graphql::get_store(ctx).await?;
+    let map = store.outlier_map().into_prefix_map(&prefix);
 
     super::load_with_filter(
         &map,
@@ -225,10 +221,8 @@ impl RankedOutlierTotalCount {
         } else {
             bincode::DefaultOptions::new().serialize(&self.model_id)?
         };
-        let map = ctx
-            .data::<Arc<Store>>()?
-            .outlier_map()
-            .into_prefix_map(&prefix);
+        let store = crate::graphql::get_store(ctx).await?;
+        let map = store.outlier_map().into_prefix_map(&prefix);
 
         let count = map
             .iter_forward()?

@@ -55,7 +55,8 @@ impl EventStream {
         start: DateTime<Utc>,
         fetch_interval: Option<u64>,
     ) -> Result<impl Stream<Item = Event>> {
-        let store = ctx.data::<Arc<Store>>()?.clone();
+        use tokio::sync::RwLock;
+        let store = ctx.data::<Arc<RwLock<Store>>>()?.clone();
         let fetch_time = if let Some(fetch_time) = fetch_interval {
             fetch_time
         } else {
@@ -63,7 +64,9 @@ impl EventStream {
         };
         let (tx, rx) = unbounded();
         tokio::spawn(async move {
-            if let Err(e) = fetch_events(store, start.timestamp_nanos(), tx, fetch_time).await {
+            let store = store.read().await;
+
+            if let Err(e) = fetch_events(&store, start.timestamp_nanos(), tx, fetch_time).await {
                 error!("{e:?}");
             }
         });
@@ -72,7 +75,7 @@ impl EventStream {
 }
 
 async fn fetch_events(
-    db: Arc<Store>,
+    db: &Store,
     start_time: i64,
     tx: UnboundedSender<Event>,
     fecth_time: u64,
@@ -172,7 +175,7 @@ impl EventQuery {
             first,
             last,
             |after, before, first, last| async move {
-                load(ctx, &filter, after, before, first, last)
+                load(ctx, &filter, after, before, first, last).await
             },
         )
         .await
@@ -322,12 +325,16 @@ impl DnsCovertChannel {
     }
 
     async fn src_customer(&self, ctx: &Context<'_>) -> Result<Option<Customer>> {
-        let map = ctx.data::<Arc<Store>>()?.customer_map();
+        let store = crate::graphql::get_store(ctx).await?;
+
+        let map = store.customer_map();
         find_ip_customer(&map, self.inner.src_addr)
     }
 
     async fn src_network(&self, ctx: &Context<'_>) -> Result<Option<Network>> {
-        let map = ctx.data::<Arc<Store>>()?.network_map();
+        let store = crate::graphql::get_store(ctx).await?;
+
+        let map = store.network_map();
         find_ip_network(&map, self.inner.src_addr)
     }
 
@@ -347,12 +354,14 @@ impl DnsCovertChannel {
     }
 
     async fn dst_customer(&self, ctx: &Context<'_>) -> Result<Option<Customer>> {
-        let map = ctx.data::<Arc<Store>>()?.customer_map();
+        let store = crate::graphql::get_store(ctx).await?;
+        let map = store.customer_map();
         find_ip_customer(&map, self.inner.dst_addr)
     }
 
     async fn dst_network(&self, ctx: &Context<'_>) -> Result<Option<Network>> {
-        let map = ctx.data::<Arc<Store>>()?.network_map();
+        let store = crate::graphql::get_store(ctx).await?;
+        let map = store.network_map();
         find_ip_network(&map, self.inner.dst_addr)
     }
 
@@ -472,12 +481,14 @@ impl HttpThreat {
     }
 
     async fn src_customer(&self, ctx: &Context<'_>) -> Result<Option<Customer>> {
-        let map = ctx.data::<Arc<Store>>()?.customer_map();
+        let store = crate::graphql::get_store(ctx).await?;
+        let map = store.customer_map();
         find_ip_customer(&map, self.inner.src_addr)
     }
 
     async fn src_network(&self, ctx: &Context<'_>) -> Result<Option<Network>> {
-        let map = ctx.data::<Arc<Store>>()?.network_map();
+        let store = crate::graphql::get_store(ctx).await?;
+        let map = store.network_map();
         find_ip_network(&map, self.inner.src_addr)
     }
 
@@ -497,12 +508,14 @@ impl HttpThreat {
     }
 
     async fn dst_customer(&self, ctx: &Context<'_>) -> Result<Option<Customer>> {
-        let map = ctx.data::<Arc<Store>>()?.customer_map();
+        let store = crate::graphql::get_store(ctx).await?;
+        let map = store.customer_map();
         find_ip_customer(&map, self.inner.dst_addr)
     }
 
     async fn dst_network(&self, ctx: &Context<'_>) -> Result<Option<Network>> {
-        let map = ctx.data::<Arc<Store>>()?.network_map();
+        let store = crate::graphql::get_store(ctx).await?;
+        let map = store.network_map();
         find_ip_network(&map, self.inner.dst_addr)
     }
 
@@ -670,12 +683,14 @@ impl RdpBruteForce {
     }
 
     async fn src_customer(&self, ctx: &Context<'_>) -> Result<Option<Customer>> {
-        let map = ctx.data::<Arc<Store>>()?.customer_map();
+        let store = crate::graphql::get_store(ctx).await?;
+        let map = store.customer_map();
         find_ip_customer(&map, self.inner.src_addr)
     }
 
     async fn src_network(&self, ctx: &Context<'_>) -> Result<Option<Network>> {
-        let map = ctx.data::<Arc<Store>>()?.network_map();
+        let store = crate::graphql::get_store(ctx).await?;
+        let map = store.network_map();
         find_ip_network(&map, self.inner.src_addr)
     }
 
@@ -723,12 +738,14 @@ impl RepeatedHttpSessions {
     }
 
     async fn src_customer(&self, ctx: &Context<'_>) -> Result<Option<Customer>> {
-        let map = ctx.data::<Arc<Store>>()?.customer_map();
+        let store = crate::graphql::get_store(ctx).await?;
+        let map = store.customer_map();
         find_ip_customer(&map, self.inner.src_addr)
     }
 
     async fn src_network(&self, ctx: &Context<'_>) -> Result<Option<Network>> {
-        let map = ctx.data::<Arc<Store>>()?.network_map();
+        let store = crate::graphql::get_store(ctx).await?;
+        let map = store.network_map();
         find_ip_network(&map, self.inner.src_addr)
     }
 
@@ -752,12 +769,14 @@ impl RepeatedHttpSessions {
     }
 
     async fn dst_customer(&self, ctx: &Context<'_>) -> Result<Option<Customer>> {
-        let map = ctx.data::<Arc<Store>>()?.customer_map();
+        let store = crate::graphql::get_store(ctx).await?;
+        let map = store.customer_map();
         find_ip_customer(&map, self.inner.dst_addr)
     }
 
     async fn dst_network(&self, ctx: &Context<'_>) -> Result<Option<Network>> {
-        let map = ctx.data::<Arc<Store>>()?.network_map();
+        let store = crate::graphql::get_store(ctx).await?;
+        let map = store.network_map();
         find_ip_network(&map, self.inner.dst_addr)
     }
 
@@ -809,12 +828,14 @@ impl TorConnection {
     }
 
     async fn src_customer(&self, ctx: &Context<'_>) -> Result<Option<Customer>> {
-        let map = ctx.data::<Arc<Store>>()?.customer_map();
+        let store = crate::graphql::get_store(ctx).await?;
+        let map = store.customer_map();
         find_ip_customer(&map, self.inner.src_addr)
     }
 
     async fn src_network(&self, ctx: &Context<'_>) -> Result<Option<Network>> {
-        let map = ctx.data::<Arc<Store>>()?.network_map();
+        let store = crate::graphql::get_store(ctx).await?;
+        let map = store.network_map();
         find_ip_network(&map, self.inner.src_addr)
     }
 
@@ -838,12 +859,14 @@ impl TorConnection {
     }
 
     async fn dst_customer(&self, ctx: &Context<'_>) -> Result<Option<Customer>> {
-        let map = ctx.data::<Arc<Store>>()?.customer_map();
+        let store = crate::graphql::get_store(ctx).await?;
+        let map = store.customer_map();
         find_ip_customer(&map, self.inner.dst_addr)
     }
 
     async fn dst_network(&self, ctx: &Context<'_>) -> Result<Option<Network>> {
-        let map = ctx.data::<Arc<Store>>()?.network_map();
+        let store = crate::graphql::get_store(ctx).await?;
+        let map = store.network_map();
         find_ip_network(&map, self.inner.dst_addr)
     }
 
@@ -951,12 +974,14 @@ impl DomainGenerationAlgorithm {
     }
 
     async fn src_customer(&self, ctx: &Context<'_>) -> Result<Option<Customer>> {
-        let map = ctx.data::<Arc<Store>>()?.customer_map();
+        let store = crate::graphql::get_store(ctx).await?;
+        let map = store.customer_map();
         find_ip_customer(&map, self.inner.src_addr)
     }
 
     async fn src_network(&self, ctx: &Context<'_>) -> Result<Option<Network>> {
-        let map = ctx.data::<Arc<Store>>()?.network_map();
+        let store = crate::graphql::get_store(ctx).await?;
+        let map = store.network_map();
         find_ip_network(&map, self.inner.src_addr)
     }
 
@@ -976,12 +1001,14 @@ impl DomainGenerationAlgorithm {
     }
 
     async fn dst_customer(&self, ctx: &Context<'_>) -> Result<Option<Customer>> {
-        let map = ctx.data::<Arc<Store>>()?.customer_map();
+        let store = crate::graphql::get_store(ctx).await?;
+        let map = store.customer_map();
         find_ip_customer(&map, self.inner.dst_addr)
     }
 
     async fn dst_network(&self, ctx: &Context<'_>) -> Result<Option<Network>> {
-        let map = ctx.data::<Arc<Store>>()?.network_map();
+        let store = crate::graphql::get_store(ctx).await?;
+        let map = store.network_map();
         find_ip_network(&map, self.inner.dst_addr)
     }
 
@@ -1085,8 +1112,9 @@ struct EventTotalCount {
 impl EventTotalCount {
     /// The total number of events.
     async fn total_count(&self, ctx: &Context<'_>) -> Result<usize> {
-        let db = ctx.data::<Arc<Store>>()?;
-        let events = db.events();
+        let store = crate::graphql::get_store(ctx).await?;
+
+        let events = store.events();
         let locator = if self.filter.has_country() {
             if let Ok(mutex) = ctx.data::<Arc<Mutex<ip2location::DB>>>() {
                 Some(Arc::clone(mutex))
@@ -1135,10 +1163,7 @@ impl EventTotalCount {
 }
 
 #[allow(clippy::too_many_lines)]
-fn from_filter_input(
-    store: &Arc<Store>,
-    input: &EventListFilterInput,
-) -> anyhow::Result<EventFilter> {
+fn from_filter_input(store: &Store, input: &EventListFilterInput) -> anyhow::Result<EventFilter> {
     let customers = if let Some(customers_input) = input.customers.as_deref() {
         let map = store.customer_map();
         Some(convert_customer_input(&map, customers_input)?)
@@ -1378,7 +1403,7 @@ fn convert_triage_input(
     Ok(triage_policies)
 }
 
-fn load(
+async fn load(
     ctx: &Context<'_>,
     filter: &EventListFilterInput,
     after: Option<String>,
@@ -1386,10 +1411,11 @@ fn load(
     first: Option<usize>,
     last: Option<usize>,
 ) -> Result<Connection<String, Event, EventTotalCount, EmptyFields>> {
-    let store = ctx.data::<Arc<Store>>()?;
+    let store = crate::graphql::get_store(ctx).await?;
+
     let start = filter.start;
     let end = filter.end;
-    let mut filter = from_filter_input(store, filter)?;
+    let mut filter = from_filter_input(&store, filter)?;
     filter.moderate_kinds();
     let db = store.events();
     let (events, has_previous, has_next) = if let Some(last) = last {
@@ -1583,7 +1609,8 @@ mod tests {
             "{eventList: {edges: [],totalCount: 0}}"
         );
 
-        let db = schema.event_database();
+        let store = schema.store().await;
+        let db = store.events();
         let ts1 = NaiveDate::from_ymd_opt(2018, 1, 26)
             .unwrap()
             .and_hms_micro_opt(18, 30, 9, 453_829)
@@ -1640,7 +1667,8 @@ mod tests {
         .collect();
         let src_dst: Vec<_> = vec![(1, 2), (3, 1), (2, 3)];
         let schema = TestSchema::new().await;
-        let db = schema.event_database();
+        let store = schema.store().await;
+        let db = store.events();
         timestamps
             .iter()
             .zip(src_dst.into_iter())
@@ -1702,7 +1730,8 @@ mod tests {
     #[tokio::test]
     async fn filter_by_customer() {
         let schema = TestSchema::new().await;
-        let db = schema.event_database();
+        let store = schema.store().await;
+        let db = store.events();
         let ts1 = NaiveDate::from_ymd_opt(2018, 1, 26)
             .unwrap()
             .and_hms_micro_opt(18, 30, 9, 453_829)
@@ -1764,7 +1793,8 @@ mod tests {
     #[tokio::test]
     async fn filter_by_direction() {
         let schema = TestSchema::new().await;
-        let db = schema.event_database();
+        let store = schema.store().await;
+        let db = store.events();
         let ts1 = NaiveDate::from_ymd_opt(2018, 1, 26)
             .unwrap()
             .and_hms_micro_opt(18, 30, 9, 453_829)
@@ -1830,7 +1860,8 @@ mod tests {
     #[tokio::test]
     async fn filter_by_network() {
         let schema = TestSchema::new().await;
-        let db = schema.event_database();
+        let store = schema.store().await;
+        let db = store.events();
         let ts1 = NaiveDate::from_ymd_opt(2018, 1, 26)
             .unwrap()
             .and_hms_micro_opt(18, 30, 9, 453_829)
@@ -1892,7 +1923,8 @@ mod tests {
     #[tokio::test]
     async fn event_stream() {
         let schema = TestSchema::new().await;
-        let db = schema.event_database();
+        let store = schema.store().await;
+        let db = store.events();
         let ts1 = NaiveDate::from_ymd_opt(2018, 1, 26)
             .unwrap()
             .and_hms_micro_opt(18, 30, 9, 453_829)

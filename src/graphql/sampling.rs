@@ -9,10 +9,10 @@ use bincode::Options;
 use chrono::{DateTime, Utc};
 use oinq::RequestCode;
 use review_database::{
-    Indexable, Indexed, IndexedMap, IndexedMapIterator, IndexedMapUpdate, IterableMap, Store,
+    Indexable, Indexed, IndexedMap, IndexedMapIterator, IndexedMapUpdate, IterableMap,
 };
 use serde::{Deserialize, Serialize};
-use std::{net::IpAddr, sync::Arc};
+use std::net::IpAddr;
 
 #[derive(Default)]
 pub(super) struct SamplingPolicyQuery;
@@ -106,8 +106,9 @@ struct SamplingPolicyTotalCount;
 impl SamplingPolicyTotalCount {
     /// The total number of edges.
     async fn total_count(&self, ctx: &Context<'_>) -> Result<usize> {
-        let db = ctx.data::<Arc<Store>>()?;
-        Ok(db.sampling_policy_map().count()?)
+        let store = crate::graphql::get_store(ctx).await?;
+
+        Ok(store.sampling_policy_map().count()?)
     }
 }
 
@@ -159,7 +160,7 @@ impl SamplingPolicyQuery {
             before,
             first,
             last,
-            |after, before, first, last| async move { load(ctx, after, before, first, last) },
+            |after, before, first, last| async move { load(ctx, after, before, first, last).await },
         )
         .await
     }
@@ -170,8 +171,8 @@ impl SamplingPolicyQuery {
     async fn sampling_policy(&self, ctx: &Context<'_>, id: ID) -> Result<SamplingPolicy> {
         let i = id.as_str().parse::<u32>().map_err(|_| "invalid ID")?;
 
-        let db = ctx.data::<Arc<Store>>()?;
-        let map = db.sampling_policy_map();
+        let store = crate::graphql::get_store(ctx).await?;
+        let map = store.sampling_policy_map();
         let Some(value) = map.get_by_id(i)? else {
             return Err("no such sampling policy".into())
         };
@@ -181,14 +182,15 @@ impl SamplingPolicyQuery {
     }
 }
 
-fn load(
+async fn load(
     ctx: &Context<'_>,
     after: Option<String>,
     before: Option<String>,
     first: Option<usize>,
     last: Option<usize>,
 ) -> Result<Connection<String, SamplingPolicy, SamplingPolicyTotalCount, EmptyFields>> {
-    let map = ctx.data::<Arc<Store>>()?.sampling_policy_map();
+    let store = crate::graphql::get_store(ctx).await?;
+    let map = store.sampling_policy_map();
     super::load::<
         '_,
         IndexedMap,
@@ -231,8 +233,9 @@ impl TryFrom<SamplingPolicy> for SamplingPolicyInput {
     }
 }
 
-fn load_immutable(ctx: &Context<'_>) -> Result<Vec<Policy>> {
-    let map = ctx.data::<Arc<Store>>()?.sampling_policy_map();
+async fn load_immutable(ctx: &Context<'_>) -> Result<Vec<Policy>> {
+    let store = crate::graphql::get_store(ctx).await?;
+    let map = store.sampling_policy_map();
     let codec = bincode::DefaultOptions::new();
 
     let mut rtn: Vec<Policy> = Vec::new();
@@ -314,14 +317,14 @@ impl SamplingPolicyMutation {
 
         let id;
         {
-            let db = ctx.data::<Arc<Store>>()?;
-            let map = db.sampling_policy_map();
+            let store = crate::graphql::get_store(ctx).await?;
+            let map = store.sampling_policy_map();
             id = map.insert(pol.clone())?;
         }
 
         if immutable {
             let mut msg = bincode::serialize::<u32>(&RequestCode::SamplingPolicyList.into())?;
-            let policies = load_immutable(ctx)?;
+            let policies = load_immutable(ctx).await?;
             msg.extend(bincode::DefaultOptions::new().serialize(&policies)?);
 
             let agents = ctx.data::<BoxedAgentManager>()?;
@@ -331,8 +334,8 @@ impl SamplingPolicyMutation {
                 #[allow(clippy::redundant_clone)]
                 let mut new = old.clone();
                 new.immutable = false;
-                let db = ctx.data::<Arc<Store>>()?;
-                let map = db.sampling_policy_map();
+                let store = crate::graphql::get_store(ctx).await?;
+                let map = store.sampling_policy_map();
                 map.update(id, &old, &new)?;
                 return Err(e.into());
             }
@@ -351,7 +354,8 @@ impl SamplingPolicyMutation {
         ctx: &Context<'_>,
         #[graphql(validator(min_items = 1))] ids: Vec<ID>,
     ) -> Result<Vec<String>> {
-        let map = ctx.data::<Arc<Store>>()?.sampling_policy_map();
+        let store = crate::graphql::get_store(ctx).await?;
+        let map = store.sampling_policy_map();
 
         let mut removed = Vec::<String>::with_capacity(ids.len());
         for id in ids {
@@ -383,8 +387,8 @@ impl SamplingPolicyMutation {
             return Err("immutable set by user".into());
         }
 
-        let db = ctx.data::<Arc<Store>>()?;
-        let map = db.sampling_policy_map();
+        let store = crate::graphql::get_store(ctx).await?;
+        let map = store.sampling_policy_map();
         map.update(i, &old, &new)?;
 
         Ok(id)

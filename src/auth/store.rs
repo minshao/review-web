@@ -2,7 +2,7 @@ use super::AuthError;
 use crate::Store;
 use anyhow::{anyhow, bail, Result};
 use bincode::Options;
-use std::{collections::HashSet, sync::Arc};
+use std::collections::HashSet;
 
 /// Inserts a token into the store.
 ///
@@ -10,7 +10,7 @@ use std::{collections::HashSet, sync::Arc};
 ///
 /// Returns an error if the tokens in the store are invalid, if the token cannot be serialized, or
 /// if the store cannot be accessed.
-pub fn insert_token(store: &Arc<Store>, token: &str, username: &str) -> Result<()> {
+pub fn insert_token(store: &Store, token: &str, username: &str) -> Result<()> {
     let map = store.access_token_map();
     let tokens = map.get(username.as_bytes())?;
     let value = if let Some(tokens) = tokens {
@@ -33,9 +33,10 @@ pub fn insert_token(store: &Arc<Store>, token: &str, username: &str) -> Result<(
 ///
 /// Returns an error if the tokens in the store are invalid, if the token cannot be serialized, or
 /// if the store cannot be accessed.
-pub fn revoke_token(store: &Arc<Store>, token: &str) -> Result<()> {
+pub fn revoke_token(store: &Store, token: &str) -> Result<()> {
     let decoded_token = super::decode_token(token)?;
     let username = decoded_token.sub;
+
     let map = store.access_token_map();
     let value = map
         .get(username.as_bytes())?
@@ -53,7 +54,7 @@ pub fn revoke_token(store: &Arc<Store>, token: &str) -> Result<()> {
 }
 
 pub(super) fn token_exists_in_store(
-    store: &Arc<Store>,
+    store: &Store,
     token: &str,
     username: &str,
 ) -> Result<bool, AuthError> {

@@ -27,7 +27,10 @@ use std::{
     path::{Path, PathBuf},
     sync::{Arc, Mutex},
 };
-use tokio::{sync::Notify, task::JoinHandle};
+use tokio::{
+    sync::{Notify, RwLock},
+    task::JoinHandle,
+};
 use tower_http::{services::ServeDir, trace::TraceLayer};
 use tracing::error;
 
@@ -49,7 +52,7 @@ pub struct ServerConfig {
 pub async fn serve<A>(
     config: ServerConfig,
     db: Database,
-    store: Arc<Store>,
+    store: Arc<RwLock<Store>>,
     ip_locator: Option<Arc<Mutex<ip2location::DB>>>,
     agent_manager: A,
 ) -> Arc<Notify>
@@ -173,7 +176,7 @@ async fn graphql_playground() -> Result<impl IntoResponse, Error> {
 
 async fn graphql_handler(
     Extension(schema): Extension<graphql::Schema>,
-    Extension(store): Extension<Arc<Store>>,
+    Extension(store): Extension<Arc<RwLock<Store>>>,
     auth: Result<TypedHeader<Authorization<Bearer>>, TypedHeaderRejection>,
     request: GraphQLRequest,
 ) -> Result<GraphQLResponse, Error> {
@@ -181,7 +184,11 @@ async fn graphql_handler(
 
     match auth {
         Ok(auth) => {
+            println!("validating...");
+            let store = store.read().await;
             let (username, role) = validate_token(&store, auth.token())?;
+            drop(store);
+            println!("validating...released");
             Ok(schema
                 .execute(request.data(username).data(role))
                 .await
@@ -194,7 +201,7 @@ async fn graphql_handler(
 #[allow(clippy::unused_async)]
 async fn graphql_ws_handler(
     Extension(schema): Extension<graphql::Schema>,
-    Extension(store): Extension<Arc<Store>>,
+    Extension(store): Extension<Arc<RwLock<Store>>>,
     protocol: GraphQLProtocol,
     websocket: WebSocketUpgrade,
 ) -> Response {
@@ -211,7 +218,11 @@ async fn graphql_ws_handler(
                     let auth_data = serde_json::from_value::<AuthData>(value)?;
                     let mut data = Data::default();
                     if let Some(token) = auth_data.auth.split_ascii_whitespace().last() {
+                        println!("validating...1");
+                        let store = store.read().await;
                         let (username, role) = validate_token(&store, token)?;
+                        drop(store);
+                        println!("validating...1 done");
                         data.insert(role);
                         data.insert(username);
                     }
