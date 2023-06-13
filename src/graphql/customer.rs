@@ -11,10 +11,7 @@ use review_database::{
     self as database, types::FromKeyValue, Indexed, IndexedMap, IndexedMapIterator,
     IndexedMapUpdate, IterableMap, Store,
 };
-use std::{
-    convert::{TryFrom, TryInto},
-    sync::Arc,
-};
+use std::convert::{TryFrom, TryInto};
 use tracing::error;
 
 #[derive(Default)]
@@ -38,7 +35,7 @@ impl CustomerQuery {
             before,
             first,
             last,
-            |after, before, first, last| async move { load(ctx, after, before, first, last) },
+            |after, before, first, last| async move { load(ctx, after, before, first, last).await },
         )
         .await
     }
@@ -49,8 +46,8 @@ impl CustomerQuery {
     async fn customer(&self, ctx: &Context<'_>, id: ID) -> Result<Customer> {
         let i = id.as_str().parse::<u32>().map_err(|_| "invalid ID")?;
 
-        let db = ctx.data::<Arc<Store>>()?;
-        let map = db.customer_map();
+        let store = crate::graphql::get_store(ctx).await?;
+        let map = store.customer_map();
         let Some(value) = map.get_by_id(i)? else {
             return Err("no such customer".into())
         };
@@ -76,8 +73,8 @@ impl CustomerMutation {
         description: String,
         networks: Vec<CustomerNetworkInput>,
     ) -> Result<ID> {
-        let db = ctx.data::<Arc<Store>>()?;
-        let map = db.customer_map();
+        let store = crate::graphql::get_store(ctx).await?;
+        let map = store.customer_map();
         let mut customer_networks = Vec::<database::CustomerNetwork>::with_capacity(networks.len());
         for n in networks {
             customer_networks.push(n.try_into().map_err(|_| "invalid IP or network address")?);
@@ -109,11 +106,11 @@ impl CustomerMutation {
         #[graphql(validator(min_items = 1))] ids: Vec<ID>,
     ) -> Result<Vec<String>> {
         let (registered_customer_is_removed, removed) = {
-            let db = ctx.data::<Arc<Store>>()?;
-            let map = db.customer_map();
-            let network_map = db.network_map();
+            let store = crate::graphql::get_store(ctx).await?;
+            let map = store.customer_map();
+            let network_map = store.network_map();
 
-            let customer_id = get_customer_id_of_review_host(db).ok().flatten();
+            let customer_id = get_customer_id_of_review_host(&store).ok().flatten();
             let mut registered_customer_is_removed = false;
             let mut removed = Vec::<String>::with_capacity(ids.len());
             for id in ids {
@@ -174,15 +171,15 @@ impl CustomerMutation {
     ) -> Result<ID> {
         let i = id.as_str().parse::<u32>().map_err(|_| "invalid ID")?;
         let changed_networks = {
-            let db = ctx.data::<Arc<Store>>()?;
-            let map = db.customer_map();
+            let store = crate::graphql::get_store(ctx).await?;
+            let map = store.customer_map();
             map.update(i, &old, &new)?;
 
             let mut hosts = vec![];
             let mut networks = vec![];
             let mut ip_ranges = vec![];
             if let Some(new_networks) = new.networks {
-                let customer_id = get_customer_id_of_review_host(db).ok().flatten();
+                let customer_id = get_customer_id_of_review_host(&store).ok().flatten();
                 if customer_id == Some(i) {
                     for nn in new_networks {
                         if let Ok(v) = database::HostNetworkGroup::try_from(nn.network_group) {
@@ -517,20 +514,20 @@ struct CustomerTotalCount;
 impl CustomerTotalCount {
     /// The total number of edges.
     async fn total_count(&self, ctx: &Context<'_>) -> Result<usize> {
-        let db = ctx.data::<Arc<Store>>()?;
-        Ok(db.customer_map().count()?)
+        let store = crate::graphql::get_store(ctx).await?;
+        Ok(store.customer_map().count()?)
     }
 }
 
-fn load(
+async fn load(
     ctx: &Context<'_>,
     after: Option<String>,
     before: Option<String>,
     first: Option<usize>,
     last: Option<usize>,
 ) -> Result<Connection<String, Customer, CustomerTotalCount, EmptyFields>> {
-    let db = ctx.data::<Arc<Store>>()?;
-    let map = db.customer_map();
+    let store = crate::graphql::get_store(ctx).await?;
+    let map = store.customer_map();
     super::load::<
         '_,
         IndexedMap,
@@ -546,10 +543,7 @@ fn load(
 /// # Errors
 ///
 /// Returns an error if the customer database could not be retrieved.
-pub fn get_customer_networks(
-    db: &Arc<Store>,
-    customer_id: u32,
-) -> Result<database::HostNetworkGroup> {
+pub fn get_customer_networks(db: &Store, customer_id: u32) -> Result<database::HostNetworkGroup> {
     let map = db.customer_map();
     let mut hosts = vec![];
     let mut networks = vec![];

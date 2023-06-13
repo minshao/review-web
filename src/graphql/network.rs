@@ -12,9 +12,9 @@ use bincode::Options;
 use chrono::{DateTime, Utc};
 use review_database::{
     self as database, types::FromKeyValue, Indexed, IndexedMapIterator, IndexedMapUpdate,
-    IndexedMultimap, IterableMap, Store,
+    IndexedMultimap, IterableMap,
 };
-use std::{convert::TryInto, mem::size_of, sync::Arc};
+use std::{convert::TryInto, mem::size_of};
 
 #[derive(Default)]
 pub(super) struct NetworkQuery;
@@ -39,7 +39,7 @@ impl NetworkQuery {
             before,
             first,
             last,
-            |after, before, first, last| async move { load(ctx, after, before, first, last) },
+            |after, before, first, last| async move { load(ctx, after, before, first, last).await },
         )
         .await
     }
@@ -52,7 +52,8 @@ impl NetworkQuery {
     async fn network(&self, ctx: &Context<'_>, id: ID) -> Result<Network> {
         let i = id.as_str().parse::<u32>().map_err(|_| "invalid ID")?;
 
-        let map = ctx.data::<Arc<Store>>()?.network_map();
+        let store = crate::graphql::get_store(ctx).await?;
+        let map = store.network_map();
         let Some((key, value)) = map.get_kv_by_id(i)? else {
             return Err("no such network".into());
         };
@@ -83,7 +84,8 @@ impl NetworkMutation {
         tag_ids.sort_unstable();
         tag_ids.dedup();
 
-        let map = ctx.data::<Arc<Store>>()?.network_map();
+        let store = crate::graphql::get_store(ctx).await?;
+        let map = store.network_map();
         let mut key = Vec::with_capacity(name.len());
         key.extend_from_slice(name.as_bytes());
         key.resize(name.len() + size_of::<u32>(), 0);
@@ -114,7 +116,8 @@ impl NetworkMutation {
         ctx: &Context<'_>,
         #[graphql(validator(min_items = 1))] ids: Vec<ID>,
     ) -> Result<Vec<String>> {
-        let map = ctx.data::<Arc<Store>>()?.network_map();
+        let store = crate::graphql::get_store(ctx).await?;
+        let map = store.network_map();
 
         let mut removed = Vec::with_capacity(ids.len());
         for id in ids {
@@ -149,7 +152,8 @@ impl NetworkMutation {
     ) -> Result<ID> {
         let i = id.as_str().parse::<u32>().map_err(|_| "invalid ID")?;
 
-        let map = ctx.data::<Arc<Store>>()?.network_map();
+        let store = crate::graphql::get_store(ctx).await?;
+        let map = store.network_map();
         map.update(i, &old, &new)?;
         Ok(id)
     }
@@ -256,8 +260,8 @@ impl Network {
 
     #[graphql(name = "customerList")]
     async fn customer_ids(&self, ctx: &Context<'_>) -> Result<Vec<Customer>> {
-        let db = ctx.data::<Arc<Store>>()?;
-        let map = db.customer_map();
+        let store = crate::graphql::get_store(ctx).await?;
+        let map = store.customer_map();
         let mut customers = Vec::new();
         let codec = bincode::DefaultOptions::new();
         for &id in &self.inner.customer_ids {
@@ -294,20 +298,21 @@ struct NetworkTotalCount;
 impl NetworkTotalCount {
     /// The total number of edges.
     async fn total_count(&self, ctx: &Context<'_>) -> Result<usize> {
-        let db = ctx.data::<Arc<Store>>()?;
-        Ok(db.network_map().count()?)
+        let store = crate::graphql::get_store(ctx).await?;
+
+        Ok(store.network_map().count()?)
     }
 }
 
-fn load(
+async fn load(
     ctx: &Context<'_>,
     after: Option<String>,
     before: Option<String>,
     first: Option<usize>,
     last: Option<usize>,
 ) -> Result<Connection<String, Network, NetworkTotalCount, EmptyFields>> {
-    let db = ctx.data::<Arc<Store>>()?;
-    let map = db.network_map();
+    let store = crate::graphql::get_store(ctx).await?;
+    let map = store.network_map();
     super::load::<
         '_,
         IndexedMultimap,
@@ -318,8 +323,9 @@ fn load(
     >(&map, after, before, first, last, NetworkTotalCount)
 }
 
-pub(super) fn remove_tag(ctx: &Context<'_>, tag_id: u32) -> Result<()> {
-    let map = ctx.data::<Arc<Store>>()?.network_map();
+pub(super) async fn remove_tag(ctx: &Context<'_>, tag_id: u32) -> Result<()> {
+    let store = crate::graphql::get_store(ctx).await?;
+    let map = store.network_map();
     let mut updates = Vec::new();
     for (key, value) in map.iter_forward()? {
         let network = database::Network::from_key_value(key.as_ref(), value.as_ref())

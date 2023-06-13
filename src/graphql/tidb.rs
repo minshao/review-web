@@ -1,7 +1,6 @@
 use super::{Role, RoleGuard};
 use async_graphql::{Context, Enum, Object, Result, SimpleObject};
-use review_database::{self as database, IterableMap, Store};
-use std::sync::Arc;
+use review_database::{self as database, IterableMap};
 
 #[derive(Default)]
 pub(super) struct TidbQuery;
@@ -12,16 +11,16 @@ impl TidbQuery {
     #[graphql(guard = "RoleGuard::new(Role::SystemAdministrator)
         .or(RoleGuard::new(Role::SecurityAdministrator))")]
     async fn tidb(&self, ctx: &Context<'_>, name: String) -> Result<Tidb> {
-        let store = ctx.data::<Arc<Store>>()?;
-        Ok(database::Tidb::get(store, &name)?.into())
+        let store = super::get_store(ctx).await?;
+        Ok(database::Tidb::get(&store, &name)?.into())
     }
 
     /// A list of ti databases
     #[graphql(guard = "RoleGuard::new(Role::SystemAdministrator)
         .or(RoleGuard::new(Role::SecurityAdministrator))")]
     async fn tidb_list(&self, ctx: &Context<'_>) -> Result<Vec<Tidb>> {
-        let store = ctx.data::<Arc<Store>>()?;
-        let list = database::Tidb::get_list(store)?;
+        let store = super::get_store(ctx).await?;
+        let list = database::Tidb::get_list(&store)?;
         Ok(list.into_iter().map(Into::into).collect())
     }
 
@@ -38,8 +37,8 @@ impl TidbQuery {
             .as_str()
             .parse::<u32>()
             .map_err(|_| "invalid rule ID")?;
-        let store = ctx.data::<Arc<Store>>()?;
-        Ok(database::Tidb::get_rule(store, &name, rule_id)?.map(Into::into))
+        let store = super::get_store(ctx).await?;
+        Ok(database::Tidb::get_rule(&store, &name, rule_id)?.map(Into::into))
     }
 }
 
@@ -54,8 +53,8 @@ impl TidbMutation {
         .or(RoleGuard::new(Role::SecurityAdministrator))")]
     async fn insert_tidb(&self, ctx: &Context<'_>, dbfile: String) -> Result<TidbOutput> {
         let tidb = database::Tidb::new(&dbfile)?;
-        let store = ctx.data::<Arc<Store>>()?;
-        let (name, version) = tidb.insert(store)?;
+        let store = super::get_store(ctx).await?;
+        let (name, version) = tidb.insert(&store)?;
         Ok(TidbOutput { name, version })
     }
 
@@ -69,10 +68,10 @@ impl TidbMutation {
         ctx: &Context<'_>,
         #[graphql(validator(min_items = 1))] names: Vec<String>,
     ) -> Result<Vec<String>> {
-        let store = ctx.data::<Arc<Store>>()?;
+        let store = super::get_store(ctx).await?;
         let mut removed = Vec::with_capacity(names.len());
         for name in names {
-            match database::Tidb::remove(store, &name) {
+            match database::Tidb::remove(&store, &name) {
                 Ok(_) => removed.push(name),
                 Err(e) => return Err(format!("{e:?}").into()),
             };
@@ -92,8 +91,8 @@ impl TidbMutation {
         new: String,
     ) -> Result<TidbOutput> {
         let tidb = database::Tidb::new(&new)?;
-        let store = ctx.data::<Arc<Store>>()?;
-        let (name, version) = tidb.update(store, &name)?;
+        let store = super::get_store(ctx).await?;
+        let (name, version) = tidb.update(&store, &name)?;
         Ok(TidbOutput { name, version })
     }
 }
@@ -200,7 +199,8 @@ struct TidbTotalCount;
 impl TidbTotalCount {
     /// The total number of edges.
     async fn total_count(&self, ctx: &Context<'_>) -> Result<usize> {
-        let map = ctx.data::<Arc<Store>>()?.tidb_map();
+        let store = super::get_store(ctx).await?;
+        let map = store.tidb_map();
         let count = map.iter_forward()?.count();
         Ok(count)
     }

@@ -1,8 +1,6 @@
 use super::{Role, Tag};
 use crate::graphql::{network, RoleGuard};
 use async_graphql::{Context, Object, Result, ID};
-use review_database::Store;
-use std::sync::Arc;
 
 #[derive(Default)]
 pub(in crate::graphql) struct NetworkTagQuery;
@@ -15,7 +13,8 @@ impl NetworkTagQuery {
         .or(RoleGuard::new(Role::SecurityManager))
         .or(RoleGuard::new(Role::SecurityMonitor))")]
     async fn network_tag_list(&self, ctx: &Context<'_>) -> Result<Vec<Tag>> {
-        let set = ctx.data::<Arc<Store>>()?.network_tag_set();
+        let store = crate::graphql::get_store(ctx).await?;
+        let set = store.network_tag_set();
         let index = set.index()?;
         Ok(index
             .iter()
@@ -37,7 +36,8 @@ impl NetworkTagMutation {
         .or(RoleGuard::new(Role::SecurityAdministrator))
         .or(RoleGuard::new(Role::SecurityManager))")]
     async fn insert_network_tag(&self, ctx: &Context<'_>, name: String) -> Result<ID> {
-        let set = ctx.data::<Arc<Store>>()?.network_tag_set();
+        let store = crate::graphql::get_store(ctx).await?;
+        let set = store.network_tag_set();
         let id = set.insert(name.as_bytes())?;
         Ok(ID(id.to_string()))
     }
@@ -50,15 +50,21 @@ impl NetworkTagMutation {
     async fn remove_network_tag(&self, ctx: &Context<'_>, id: ID) -> Result<Option<String>> {
         let id = id.0.parse::<u32>()?;
 
-        let db = ctx.data::<Arc<Store>>()?;
-        let tags = db.network_tag_set();
-        let name = tags
-            .deactivate(id)
-            .map_err(|e| format!("failed to deactivate ID: {e:#}"))?;
+        let name = {
+            let store = crate::graphql::get_store(ctx).await?;
+            let tags = store.network_tag_set();
+            tags.deactivate(id)
+                .map_err(|e| format!("failed to deactivate ID: {e:#}"))?
+        };
         network::remove_tag(ctx, id)
+            .await
             .map_err(|e| format!("failed to remove tag from networks: {}", e.message))?;
-        tags.clear_inactive()
-            .map_err(|e| format!("failed to clear inactive IDs: {e:#}"))?;
+        {
+            let store = crate::graphql::get_store(ctx).await?;
+            let tags = store.network_tag_set();
+            tags.clear_inactive()
+                .map_err(|e| format!("failed to clear inactive IDs: {e:#}"))?;
+        }
 
         Ok(Some(String::from_utf8_lossy(&name).into_owned()))
     }
@@ -77,7 +83,8 @@ impl NetworkTagMutation {
         old: String,
         new: String,
     ) -> Result<bool> {
-        let set = ctx.data::<Arc<Store>>()?.network_tag_set();
+        let store = crate::graphql::get_store(ctx).await?;
+        let set = store.network_tag_set();
         Ok(set.update(id.0.parse()?, old.as_bytes(), new.as_bytes())?)
     }
 }

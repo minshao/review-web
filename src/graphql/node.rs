@@ -9,12 +9,9 @@ use chrono::{DateTime, Utc};
 pub use crud::{get_customer_id_of_review_host, get_node_settings};
 use input::NodeInput;
 use ipnet::Ipv4Net;
-use review_database::{Indexable, Indexed, Store};
+use review_database::{Indexable, Indexed};
 use serde::{Deserialize, Serialize};
-use std::{
-    net::{IpAddr, SocketAddr},
-    sync::Arc,
-};
+use std::net::{IpAddr, SocketAddr};
 
 pub type PortNumber = u16;
 
@@ -190,8 +187,8 @@ struct NodeTotalCount;
 impl NodeTotalCount {
     /// The total number of edges.
     async fn total_count(&self, ctx: &Context<'_>) -> Result<usize> {
-        let db = ctx.data::<Arc<Store>>()?;
-        Ok(db.node_map().count()?)
+        let store = crate::graphql::get_store(ctx).await?;
+        Ok(store.node_map().count()?)
     }
 }
 
@@ -302,8 +299,8 @@ struct NodeStatusTotalCount;
 impl NodeStatusTotalCount {
     /// The total number of edges.
     async fn total_count(&self, ctx: &Context<'_>) -> Result<usize> {
-        let db = ctx.data::<Arc<Store>>()?;
-        Ok(db.node_map().count()?)
+        let store = crate::graphql::get_store(ctx).await?;
+        Ok(store.node_map().count()?)
     }
 }
 

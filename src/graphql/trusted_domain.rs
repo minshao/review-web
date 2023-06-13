@@ -3,8 +3,6 @@ use async_graphql::{
     connection::{query, Connection, EmptyFields},
     Context, Object, Result, SimpleObject,
 };
-use review_database::Store;
-use std::sync::Arc;
 
 #[derive(Default)]
 pub(super) struct TrustedDomainQuery;
@@ -29,7 +27,7 @@ impl TrustedDomainQuery {
             before,
             first,
             last,
-            |after, before, first, last| async move { load(ctx, after, before, first, last) },
+            |after, before, first, last| async move { load(ctx, after, before, first, last).await },
         )
         .await
     }
@@ -50,7 +48,8 @@ impl TrustedDomainMutation {
         remarks: String,
     ) -> Result<String> {
         {
-            let map = ctx.data::<Arc<Store>>()?.trusted_dns_server_map();
+            let store = crate::graphql::get_store(ctx).await?;
+            let map = store.trusted_dns_server_map();
             map.put(name.as_bytes(), remarks.as_bytes())?;
         }
 
@@ -65,7 +64,8 @@ impl TrustedDomainMutation {
     )]
     async fn remove_trusted_domain(&self, ctx: &Context<'_>, name: String) -> Result<String> {
         {
-            let map = ctx.data::<Arc<Store>>()?.trusted_dns_server_map();
+            let store = crate::graphql::get_store(ctx).await?;
+            let map = store.trusted_dns_server_map();
             map.delete(name.as_bytes())?;
         }
 
@@ -90,14 +90,15 @@ impl FromKeyValue for TrustedDomain {
     }
 }
 
-fn load(
+async fn load(
     ctx: &Context<'_>,
     after: Option<String>,
     before: Option<String>,
     first: Option<usize>,
     last: Option<usize>,
 ) -> Result<Connection<String, TrustedDomain, EmptyFields, EmptyFields>> {
-    let map = ctx.data::<Arc<Store>>()?.trusted_dns_server_map();
+    let store = crate::graphql::get_store(ctx).await?;
+    let map = store.trusted_dns_server_map();
     super::load(&map, after, before, first, last, EmptyFields)
 }
 

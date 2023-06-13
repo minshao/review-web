@@ -7,10 +7,9 @@ use async_graphql::{
 use bincode::Options;
 use chrono::{DateTime, Utc};
 use review_database::{
-    Indexable, Indexed, IndexedMap, IndexedMapIterator, IndexedMapUpdate, IterableMap, Store,
+    Indexable, Indexed, IndexedMap, IndexedMapIterator, IndexedMapUpdate, IterableMap,
 };
 use serde::{Deserialize, Serialize};
-use std::sync::Arc;
 
 #[derive(Deserialize, Serialize, SimpleObject)]
 #[graphql(complex)]
@@ -39,8 +38,8 @@ struct TriageResponseTotalCount;
 impl TriageResponseTotalCount {
     /// The total number of edges.
     async fn total_count(&self, ctx: &Context<'_>) -> Result<usize> {
-        let db = ctx.data::<Arc<Store>>()?;
-        Ok(db.triage_response_map().count()?)
+        let store = crate::graphql::get_store(ctx).await?;
+        Ok(store.triage_response_map().count()?)
     }
 }
 
@@ -85,7 +84,7 @@ impl super::TriageResponseQuery {
             before,
             first,
             last,
-            |after, before, first, last| async move { load(ctx, after, before, first, last) },
+            |after, before, first, last| async move { load(ctx, after, before, first, last).await },
         )
         .await
     }
@@ -99,8 +98,8 @@ impl super::TriageResponseQuery {
         source: String,
         time: DateTime<Utc>,
     ) -> Result<Option<TriageResponse>> {
-        let db = ctx.data::<Arc<Store>>()?;
-        let map = db.triage_response_map();
+        let store = crate::graphql::get_store(ctx).await?;
+        let map = store.triage_response_map();
         let key = key(&source, time);
 
         let value = if let Some(value) = map.get_by_key(&key)? {
@@ -116,14 +115,15 @@ impl super::TriageResponseQuery {
     }
 }
 
-fn load(
+async fn load(
     ctx: &Context<'_>,
     after: Option<String>,
     before: Option<String>,
     first: Option<usize>,
     last: Option<usize>,
 ) -> Result<Connection<String, TriageResponse, TriageResponseTotalCount, EmptyFields>> {
-    let map = ctx.data::<Arc<Store>>()?.triage_response_map();
+    let store = crate::graphql::get_store(ctx).await?;
+    let map = store.triage_response_map();
     super::super::load::<
         '_,
         IndexedMap,
@@ -169,8 +169,8 @@ impl super::TriageResponseMutation {
             creation_time: time,
             last_modified_time: time,
         };
-        let db = ctx.data::<Arc<Store>>()?;
-        let map = db.triage_response_map();
+        let store = crate::graphql::get_store(ctx).await?;
+        let map = store.triage_response_map();
         let id = map.insert(pol)?;
 
         Ok(ID(id.to_string()))
@@ -186,7 +186,8 @@ impl super::TriageResponseMutation {
         ctx: &Context<'_>,
         #[graphql(validator(min_items = 1))] ids: Vec<ID>,
     ) -> Result<Vec<String>> {
-        let map = ctx.data::<Arc<Store>>()?.triage_response_map();
+        let store = crate::graphql::get_store(ctx).await?;
+        let map = store.triage_response_map();
 
         let mut removed = Vec::<String>::with_capacity(ids.len());
         for id in ids {
@@ -211,8 +212,8 @@ impl super::TriageResponseMutation {
     ) -> Result<ID> {
         let i = id.as_str().parse::<u32>().map_err(|_| "invalid ID")?;
 
-        let db = ctx.data::<Arc<Store>>()?;
-        let map = db.triage_response_map();
+        let store = crate::graphql::get_store(ctx).await?;
+        let map = store.triage_response_map();
         map.update(i, &old, &new)?;
 
         Ok(id)
@@ -265,8 +266,9 @@ impl IndexedMapUpdate for TriageResponseInput {
     }
 }
 
-pub(in crate::graphql) fn remove_tag(ctx: &Context<'_>, tag_id: u32) -> Result<()> {
-    let map = ctx.data::<Arc<Store>>()?.triage_response_map();
+pub(in crate::graphql) async fn remove_tag(ctx: &Context<'_>, tag_id: u32) -> Result<()> {
+    let store = crate::graphql::get_store(ctx).await?;
+    let map = store.triage_response_map();
     let mut updates = Vec::new();
     for (_, value) in map.iter_forward()? {
         let triage_response = bincode::DefaultOptions::new()

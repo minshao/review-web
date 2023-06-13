@@ -1,8 +1,7 @@
 use crate::graphql::{Role, RoleGuard};
 use async_graphql::{Context, Object, Result, SimpleObject};
 use chrono::{DateTime, Utc};
-use review_database::{self as database, Store};
-use std::sync::Arc;
+use review_database::{self as database};
 
 #[derive(Default)]
 pub(super) struct IndicatorQuery;
@@ -13,8 +12,8 @@ impl IndicatorQuery {
     #[graphql(guard = "RoleGuard::new(Role::SystemAdministrator)
         .or(RoleGuard::new(Role::SecurityAdministrator))")]
     async fn indicator(&self, ctx: &Context<'_>, name: String) -> Result<Option<ModelIndicator>> {
-        let store = ctx.data::<Arc<Store>>()?;
-        database::ModelIndicator::get(store, &name)
+        let store = super::get_store(ctx).await?;
+        database::ModelIndicator::get(&store, &name)
             .map(|indicator| indicator.map(Into::into))
             .map_err(Into::into)
     }
@@ -25,8 +24,8 @@ impl IndicatorQuery {
         .or(RoleGuard::new(Role::SecurityManager))
         .or(RoleGuard::new(Role::SecurityMonitor))")]
     async fn indicator_list(&self, ctx: &Context<'_>) -> Result<Vec<ModelIndicatorOutput>> {
-        let store = ctx.data::<Arc<Store>>()?;
-        database::ModelIndicator::get_list(store)
+        let store = super::get_store(ctx).await?;
+        database::ModelIndicator::get_list(&store)
             .map(|list| {
                 list.into_iter()
                     .map(|(name, indicator)| ModelIndicatorOutput {
@@ -55,8 +54,8 @@ impl IndicatorMutation {
         dbfile: String,
     ) -> Result<String> {
         let indicator = database::ModelIndicator::new(&dbfile)?;
-        let store = ctx.data::<Arc<Store>>()?;
-        indicator.insert(store, &name).map_err(Into::into)
+        let store = super::get_store(ctx).await?;
+        indicator.insert(&store, &name).map_err(Into::into)
     }
 
     /// Removes Indicator, returning the db's name and version that no longer exist.
@@ -69,8 +68,8 @@ impl IndicatorMutation {
         ctx: &Context<'_>,
         #[graphql(validator(min_items = 1))] names: Vec<String>,
     ) -> Result<Vec<String>> {
-        let store = ctx.data::<Arc<Store>>()?;
-        database::ModelIndicator::remove(store, &names).map_err(Into::into)
+        let store = super::get_store(ctx).await?;
+        database::ModelIndicator::remove(&store, &names).map_err(Into::into)
     }
 
     /// Updates the given indicator, returning the indicator name that was updated.
@@ -86,8 +85,8 @@ impl IndicatorMutation {
         new: String,
     ) -> Result<String> {
         let indicator = database::ModelIndicator::new(&new)?;
-        let store = ctx.data::<Arc<Store>>()?;
-        indicator.update(store, &name).map_err(Into::into)
+        let store = super::get_store(ctx).await?;
+        indicator.update(&store, &name).map_err(Into::into)
     }
 }
 

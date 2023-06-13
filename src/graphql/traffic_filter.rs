@@ -2,11 +2,8 @@ use super::{BoxedAgentManager, Role, RoleGuard};
 use async_graphql::{Context, Object, Result};
 use chrono::{DateTime, Utc};
 use ipnet::IpNet;
-use review_database::{self as database, Store};
-use std::{
-    net::{IpAddr, Ipv4Addr},
-    sync::Arc,
-};
+use review_database::{self as database};
+use std::net::{IpAddr, Ipv4Addr};
 
 #[derive(Default)]
 pub(super) struct TrafficFilterQuery;
@@ -23,8 +20,8 @@ impl TrafficFilterQuery {
         ctx: &Context<'_>,
         agents: Option<Vec<String>>,
     ) -> Result<Option<Vec<TrafficFilter>>> {
-        let store = ctx.data::<Arc<Store>>()?;
-        let res = database::TrafficFilter::get_list(store, &agents)?;
+        let store = crate::graphql::get_store(ctx).await?;
+        let res = database::TrafficFilter::get_list(&store, &agents)?;
         Ok(res.map(|r| r.into_iter().map(Into::into).collect()))
     }
 }
@@ -48,8 +45,8 @@ impl TrafficFilterMutation {
         description: Option<String>,
     ) -> Result<usize> {
         let network = parse_network(&network)?;
-        let store = ctx.data::<Arc<Store>>()?;
-        database::TrafficFilter::insert(store, &agent, network, tcp_ports, udp_ports, description)
+        let store = crate::graphql::get_store(ctx).await?;
+        database::TrafficFilter::insert(&store, &agent, network, tcp_ports, udp_ports, description)
             .map_err(Into::into)
     }
 
@@ -67,8 +64,8 @@ impl TrafficFilterMutation {
         description: Option<String>,
     ) -> Result<usize> {
         let network = parse_network(&network)?;
-        let store = ctx.data::<Arc<Store>>()?;
-        database::TrafficFilter::update(store, &agent, network, tcp_ports, udp_ports, description)
+        let store = crate::graphql::get_store(ctx).await?;
+        database::TrafficFilter::update(&store, &agent, network, tcp_ports, udp_ports, description)
             .map_err(Into::into)
     }
 
@@ -77,8 +74,8 @@ impl TrafficFilterMutation {
         guard = "RoleGuard::new(Role::SystemAdministrator).or(RoleGuard::new(Role::SecurityAdministrator))"
     )]
     async fn clear_traffic_filter_rules(&self, ctx: &Context<'_>, agent: String) -> Result<usize> {
-        let store = ctx.data::<Arc<Store>>()?;
-        database::TrafficFilter::clear(store, &agent).map_err(Into::into)
+        let store = crate::graphql::get_store(ctx).await?;
+        database::TrafficFilter::clear(&store, &agent).map_err(Into::into)
     }
 
     /// removes traffic filtering rules from the agent
@@ -95,8 +92,8 @@ impl TrafficFilterMutation {
         for network in networks {
             new_rules.push(parse_network(&network)?);
         }
-        let store = ctx.data::<Arc<Store>>()?;
-        database::TrafficFilter::remove(store, &agent, &new_rules).map_err(Into::into)
+        let store = crate::graphql::get_store(ctx).await?;
+        database::TrafficFilter::remove(&store, &agent, &new_rules).map_err(Into::into)
     }
 
     /// applies traffic filtering rules to the agents if it is connected
@@ -108,18 +105,19 @@ impl TrafficFilterMutation {
         ctx: &Context<'_>,
         agents: Vec<String>,
     ) -> Result<Vec<String>> {
-        let store = ctx.data::<Arc<Store>>()?;
+        let store = crate::graphql::get_store(ctx).await?;
         let agent_manager = ctx.data::<BoxedAgentManager>()?;
         let mut res = Vec::new();
         for agent in &agents {
-            let rules = database::TrafficFilter::get(store, agent)?.map_or(vec![], |tf| tf.rules());
+            let rules =
+                database::TrafficFilter::get(&store, agent)?.map_or(vec![], |tf| tf.rules());
             if let Err(e) = agent_manager
                 .update_traffic_filter_rules(agent, &rules)
                 .await
             {
                 res.push(format!("{agent}: update request failed. {e:?}"));
             } else {
-                database::TrafficFilter::update_time(store, agent)?;
+                database::TrafficFilter::update_time(&store, agent)?;
                 res.push(format!("{agent}: {} rules are updated.", rules.len()));
             }
         }

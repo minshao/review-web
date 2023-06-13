@@ -8,6 +8,7 @@ use review_database::{
     self as database, Indexed, IndexedMap, IndexedMapIterator, IndexedMapUpdate, Store,
 };
 use std::sync::Arc;
+use tokio::sync::RwLock;
 
 #[derive(Default)]
 pub(super) struct DataSourceQuery;
@@ -32,7 +33,7 @@ impl DataSourceQuery {
             before,
             first,
             last,
-            |after, before, first, last| async move { load(ctx, after, before, first, last) },
+            |after, before, first, last| async move { load(ctx, after, before, first, last).await },
         )
         .await
     }
@@ -101,9 +102,10 @@ impl DataSourceMutation {
     ) -> Result<ID> {
         let value: database::DataSource = input.try_into()?;
 
-        validate_policy(ctx, &value.source, value.data_type)?;
+        validate_policy(ctx, &value.source, value.data_type).await?;
 
-        let map = ctx.data::<Arc<Store>>()?.data_source_map();
+        let store = ctx.data::<Arc<RwLock<Store>>>()?.read().await;
+        let map = store.data_source_map();
 
         let id = map.insert(value)?;
         Ok(ID(id.to_string()))
@@ -115,7 +117,9 @@ impl DataSourceMutation {
     async fn remove_data_source(&self, ctx: &Context<'_>, id: ID) -> Result<String> {
         let i = id.as_str().parse::<u32>().map_err(|_| "invalid ID")?;
 
-        let map = ctx.data::<Arc<Store>>()?.data_source_map();
+        let store = ctx.data::<Arc<RwLock<Store>>>()?.read().await;
+        let map = store.data_source_map();
+
         let key = map.remove(i)?;
         match String::from_utf8(key) {
             Ok(key) => Ok(key),
@@ -134,7 +138,9 @@ impl DataSourceMutation {
     ) -> Result<ID> {
         let i = id.as_str().parse::<u32>().map_err(|_| "invalid ID")?;
 
-        let map = ctx.data::<Arc<Store>>()?.data_source_map();
+        let store = ctx.data::<Arc<RwLock<Store>>>()?.read().await;
+        let map = store.data_source_map();
+
         map.update(i, &old, &new)?;
         Ok(id)
     }
@@ -320,19 +326,23 @@ struct DataSourceTotalCount;
 impl DataSourceTotalCount {
     /// The total number of edges.
     async fn total_count(&self, ctx: &Context<'_>) -> Result<usize> {
-        let map = ctx.data::<Arc<Store>>()?.data_source_map();
+        let store = ctx.data::<Arc<RwLock<Store>>>()?.read().await;
+        let map = store.data_source_map();
+
         Ok(map.count()?)
     }
 }
 
-fn load(
+async fn load(
     ctx: &Context<'_>,
     after: Option<String>,
     before: Option<String>,
     first: Option<usize>,
     last: Option<usize>,
 ) -> Result<Connection<String, DataSource, DataSourceTotalCount, EmptyFields>> {
-    let map = ctx.data::<Arc<Store>>()?.data_source_map();
+    let store = ctx.data::<Arc<RwLock<Store>>>()?.read().await;
+    let map = store.data_source_map();
+
     super::load::<
         '_,
         IndexedMap,
@@ -343,11 +353,12 @@ fn load(
     >(&map, after, before, first, last, DataSourceTotalCount)
 }
 
-fn validate_policy(ctx: &Context<'_>, policy: &str, kind: database::DataType) -> Result<()> {
+async fn validate_policy(ctx: &Context<'_>, policy: &str, kind: database::DataType) -> Result<()> {
     match kind {
         database::DataType::TimeSeries => {
             let policy = policy.parse::<u32>()?;
-            let map = ctx.data::<Arc<Store>>()?.sampling_policy_map();
+            let store = ctx.data::<Arc<RwLock<Store>>>()?.read().await;
+            let map = store.sampling_policy_map();
             let Some(_value) = map.get_by_id(policy)? else {
                 return Err("no such sampling policy".into())
             };

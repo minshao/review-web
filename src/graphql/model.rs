@@ -10,8 +10,7 @@ use async_graphql::{
 use bincode::Options;
 use chrono::NaiveDateTime;
 use num_traits::ToPrimitive;
-use review_database::{self as database, Database, Store};
-use std::sync::Arc;
+use review_database::{self as database, Database};
 
 const DEFAULT_MIN_SLOPE: f64 = 10.0;
 const DEFAULT_MIN_ZERO_COUNT_FOR_TREND: u32 = 5;
@@ -435,7 +434,8 @@ impl Model {
     }
 
     async fn data_source(&self, ctx: &Context<'_>) -> Result<DataSource> {
-        let map = ctx.data::<Arc<Store>>()?.data_source_map();
+        let store = crate::graphql::get_store(ctx).await?;
+        let map = store.data_source_map();
         #[allow(clippy::cast_sign_loss)] // u32 stored as i32 in the database
         match map
             .get_by_id(self.inner.data_source_id as u32)

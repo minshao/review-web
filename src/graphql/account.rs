@@ -17,6 +17,7 @@ use std::{
     net::{AddrParseError, IpAddr},
     sync::Arc,
 };
+use tokio::sync::RwLock;
 use tracing::info;
 
 #[allow(clippy::module_name_repetitions)]
@@ -43,7 +44,8 @@ impl AccountQuery {
     #[graphql(guard = "RoleGuard::new(super::Role::SystemAdministrator)
         .or(RoleGuard::new(super::Role::SecurityAdministrator))")]
     async fn account(&self, ctx: &Context<'_>, username: String) -> Result<Account> {
-        let map = ctx.data::<Arc<Store>>()?.account_map();
+        let store = ctx.data::<Arc<RwLock<Store>>>()?.read().await;
+        let map = store.account_map();
         let inner = map
             .get(&username)?
             .ok_or_else::<async_graphql::Error, _>(|| "User not found".into())?;
@@ -67,7 +69,7 @@ impl AccountQuery {
             before,
             first,
             last,
-            |after, before, first, last| async move { load(ctx, after, before, first, last) },
+            |after, before, first, last| async move { load(ctx, after, before, first, last).await },
         )
         .await
     }
@@ -76,7 +78,8 @@ impl AccountQuery {
     #[graphql(guard = "RoleGuard::new(super::Role::SystemAdministrator)
         .or(RoleGuard::new(super::Role::SecurityAdministrator))")]
     async fn signed_in_account_list(&self, ctx: &Context<'_>) -> Result<Vec<SignedInAccount>> {
-        let map = ctx.data::<Arc<Store>>()?.access_token_map();
+        let store = ctx.data::<Arc<RwLock<Store>>>()?.read().await;
+        let map = store.access_token_map();
 
         let signed = map
             .iter_forward()?
@@ -112,8 +115,9 @@ impl AccountQuery {
         .or(RoleGuard::new(super::Role::SecurityManager))
         .or(RoleGuard::new(super::Role::SecurityMonitor))")]
     async fn expiration_time(&self, ctx: &Context<'_>) -> Result<i64> {
-        let store = ctx.data::<Arc<Store>>()?;
-        expiration_time(store)
+        let store = ctx.data::<Arc<RwLock<Store>>>()?.read().await;
+
+        expiration_time(&store)
     }
 }
 
@@ -137,7 +141,8 @@ impl AccountMutation {
         allow_access_from: Option<Vec<String>>,
         max_parallel_sessions: Option<u32>,
     ) -> Result<String> {
-        let table = ctx.data::<Arc<Store>>()?.account_map();
+        let store = ctx.data::<Arc<RwLock<Store>>>()?.read().await;
+        let table = store.account_map();
         if table.contains(&username)? {
             return Err("account already exists".into());
         }
@@ -170,7 +175,8 @@ impl AccountMutation {
         ctx: &Context<'_>,
         #[graphql(validator(min_items = 1))] usernames: Vec<String>,
     ) -> Result<Vec<String>> {
-        let map = ctx.data::<Arc<Store>>()?.account_map();
+        let store = ctx.data::<Arc<RwLock<Store>>>()?.read().await;
+        let map = store.account_map();
         let mut removed = Vec::with_capacity(usernames.len());
         for username in usernames {
             map.delete(&username)?;
@@ -224,7 +230,8 @@ impl AccountMutation {
         };
         let max_parallel_sessions = max_parallel_sessions.map(|m| (m.old, m.new));
 
-        let map = ctx.data::<Arc<Store>>()?.account_map();
+        let store = ctx.data::<Arc<RwLock<Store>>>()?.read().await;
+        let map = store.account_map();
         map.update(
             username.as_bytes(),
             &password,
@@ -244,7 +251,7 @@ impl AccountMutation {
         username: String,
         password: String,
     ) -> Result<AuthPayload> {
-        let store = ctx.data::<Arc<Store>>()?;
+        let store = ctx.data::<Arc<RwLock<Store>>>()?.read().await;
         let account_map = store.account_map();
 
         if let Some(mut account) = account_map.get(&username)? {
@@ -253,7 +260,8 @@ impl AccountMutation {
                     create_token(account.username.clone(), account.role.to_string())?;
                 account.update_last_signin_time();
                 account_map.put(&account)?;
-                insert_token(store, &token, &username)?;
+
+                insert_token(&store, &token, &username)?;
 
                 info!("{} signed in", username);
                 Ok(AuthPayload {
@@ -276,8 +284,12 @@ impl AccountMutation {
         .or(RoleGuard::new(super::Role::SecurityManager))
         .or(RoleGuard::new(super::Role::SecurityMonitor))")]
     async fn sign_out(&self, ctx: &Context<'_>, token: String) -> Result<String> {
-        let store = ctx.data::<Arc<Store>>()?;
-        revoke_token(store, &token)?;
+        let store = ctx.data::<Arc<RwLock<Store>>>()?.read().await;
+        // let store = match store.read() {
+        //     Ok(s) => s,
+        //     Err(e) => return Err(e.to_string().into()),
+        // };
+        revoke_token(&store, &token)?;
         let decoded_token = decode_token(&token)?;
         let username = decoded_token.sub;
         info!("{username} signed out");
@@ -291,13 +303,13 @@ impl AccountMutation {
         .or(RoleGuard::new(super::Role::SecurityManager))
         .or(RoleGuard::new(super::Role::SecurityMonitor))")]
     async fn refresh_token(&self, ctx: &Context<'_>, token: String) -> Result<AuthPayload> {
-        let store = ctx.data::<Arc<Store>>()?;
+        let store = ctx.data::<Arc<RwLock<Store>>>()?.read().await;
         let decoded_token = decode_token(&token)?;
         let username = decoded_token.sub;
         let (new_token, expiration_time) = create_token(username.clone(), decoded_token.role)?;
-        insert_token(store, &new_token, &username)?;
-        if let Err(e) = revoke_token(store, &token) {
-            revoke_token(store, &new_token)?;
+        insert_token(&store, &new_token, &username)?;
+        if let Err(e) = revoke_token(&store, &token) {
+            revoke_token(&store, &new_token)?;
             Err(e.into())
         } else {
             Ok(AuthPayload {
@@ -311,7 +323,7 @@ impl AccountMutation {
     #[graphql(guard = "RoleGuard::new(super::Role::SystemAdministrator)
         .or(RoleGuard::new(super::Role::SecurityAdministrator))")]
     async fn update_expiration_time(&self, ctx: &Context<'_>, time: i64) -> Result<i64> {
-        let store = ctx.data::<Arc<Store>>()?;
+        let store = ctx.data::<Arc<RwLock<Store>>>()?.read().await;
         let map = store.account_policy_map();
         if let Some(value) = map.get(ACCOUNT_POLICY_KEY)? {
             let codec = bincode::DefaultOptions::new();
@@ -323,7 +335,7 @@ impl AccountMutation {
                 (ACCOUNT_POLICY_KEY, &new_value),
             )?;
         } else {
-            init_expiration_time(store, time)?;
+            init_expiration_time(&store, time)?;
         }
         update_jwt_expires_in(time)?;
         Ok(time)
@@ -336,7 +348,7 @@ impl AccountMutation {
 ///
 /// Returns an error if the account policy is not found or the value is
 /// corrupted.
-pub fn expiration_time(store: &Arc<Store>) -> Result<i64> {
+pub fn expiration_time(store: &Store) -> Result<i64> {
     let map = store.account_policy_map();
     let value = map
         .get(ACCOUNT_POLICY_KEY)?
@@ -353,7 +365,7 @@ pub fn expiration_time(store: &Arc<Store>) -> Result<i64> {
 ///
 /// Returns an error if the value cannot be serialized or the underlaying store
 /// fails to put the value.
-pub fn init_expiration_time(store: &Arc<Store>, time: i64) -> anyhow::Result<()> {
+pub fn init_expiration_time(store: &Store, time: i64) -> anyhow::Result<()> {
     let map = store.account_policy_map();
     let policy = AccountPolicy {
         expiration_time: time,
@@ -476,20 +488,22 @@ struct AccountTotalCount;
 impl AccountTotalCount {
     /// The total number of edges.
     async fn total_count(&self, ctx: &Context<'_>) -> Result<usize> {
-        let map = ctx.data::<Arc<Store>>()?.account_map();
+        let store = ctx.data::<Arc<RwLock<Store>>>()?.read().await;
+        let map = store.account_map();
         let count = map.iter_forward()?.count();
         Ok(count)
     }
 }
 
-fn load(
+async fn load(
     ctx: &Context<'_>,
     after: Option<String>,
     before: Option<String>,
     first: Option<usize>,
     last: Option<usize>,
 ) -> Result<Connection<String, Account, AccountTotalCount, EmptyFields>> {
-    let map = ctx.data::<Arc<Store>>()?.account_map();
+    let store = ctx.data::<Arc<RwLock<Store>>>()?.read().await;
+    let map = store.account_map();
     super::load::<'_, Table<types::Account>, MapIterator, Account, types::Account, AccountTotalCount>(
         &map,
         after,

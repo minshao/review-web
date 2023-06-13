@@ -14,6 +14,7 @@ use http::{request::Parts, StatusCode};
 use review_database::types::Role;
 use serde::Deserialize;
 use std::sync::Arc;
+use tokio::sync::RwLock;
 
 #[derive(Debug, Deserialize, Clone)]
 pub struct Config {
@@ -40,7 +41,7 @@ impl Config {
     }
 
     pub(crate) fn configure_reverse_proxies(
-        store: &Arc<Store>,
+        store: &Arc<RwLock<Store>>,
         client: &Option<reqwest::Client>,
         reverse_proxies: &[Self],
     ) -> Vec<(ArchiveState, Router<ArchiveState>)> {
@@ -62,7 +63,7 @@ impl Config {
 
 #[derive(Clone, FromRef)]
 pub(crate) struct ArchiveState {
-    pub store: Arc<Store>,
+    pub store: Arc<RwLock<Store>>,
     pub client: Option<reqwest::Client>,
     pub config: Config,
 }
@@ -79,16 +80,18 @@ async fn auth(
     req: Request<Body>,
     next: Next<Body>,
 ) -> Result<Response, Error> {
-    let store = state.store;
     let client = state.client;
     let config = state.config;
     match (client, config) {
         (Some(_client), config) => {
             let bearer = bearer?;
             let roles = config.roles();
+            tracing::error!("get store");
+            let store = state.store.read().await;
             let (_, role) = validate_token(&store, bearer.token())?;
 
             if roles.contains(&role) {
+                tracing::error!("release store");
                 Ok(next.run(req).await)
             } else {
                 Err(Error::Unauthorized("Access denied".to_string()))
@@ -139,7 +142,7 @@ async fn process_request(
 }
 
 fn reverse_proxy(
-    store: Arc<Store>,
+    store: Arc<RwLock<Store>>,
     client: Option<reqwest::Client>,
     config: Config,
 ) -> Router<ArchiveState> {

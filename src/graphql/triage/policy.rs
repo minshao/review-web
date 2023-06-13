@@ -12,9 +12,8 @@ use bincode::Options;
 use chrono::Utc;
 use core::convert::TryInto;
 use review_database::{
-    self as database, Indexed, IndexedMap, IndexedMapIterator, IndexedMapUpdate, Store,
+    self as database, Indexed, IndexedMap, IndexedMapIterator, IndexedMapUpdate,
 };
-use std::sync::Arc;
 
 struct TriagePolicyTotalCount;
 
@@ -22,8 +21,8 @@ struct TriagePolicyTotalCount;
 impl TriagePolicyTotalCount {
     /// The total number of edges.
     async fn total_count(&self, ctx: &Context<'_>) -> Result<usize> {
-        let db = ctx.data::<Arc<Store>>()?;
-        Ok(db.triage_policy_map().count()?)
+        let store = crate::graphql::get_store(ctx).await?;
+        Ok(store.triage_policy_map().count()?)
     }
 }
 
@@ -45,7 +44,7 @@ impl TriagePolicyQuery {
             before,
             first,
             last,
-            |after, before, first, last| async move { load(ctx, after, before, first, last) },
+            |after, before, first, last| async move { load(ctx, after, before, first, last).await },
         )
         .await
     }
@@ -56,8 +55,8 @@ impl TriagePolicyQuery {
     async fn triage_policy(&self, ctx: &Context<'_>, id: ID) -> Result<TriagePolicy> {
         let i = id.as_str().parse::<u32>().map_err(|_| "invalid ID")?;
 
-        let db = ctx.data::<Arc<Store>>()?;
-        let map = db.triage_policy_map();
+        let store = crate::graphql::get_store(ctx).await?;
+        let map = store.triage_policy_map();
         let Some(value) =  map.get_by_id(i)? else {
             return Err("no such triage policy".into())
         };
@@ -69,14 +68,15 @@ impl TriagePolicyQuery {
     }
 }
 
-fn load(
+async fn load(
     ctx: &Context<'_>,
     after: Option<String>,
     before: Option<String>,
     first: Option<usize>,
     last: Option<usize>,
 ) -> Result<Connection<String, TriagePolicy, TriagePolicyTotalCount, EmptyFields>> {
-    let map = ctx.data::<Arc<Store>>()?.triage_policy_map();
+    let store = crate::graphql::get_store(ctx).await?;
+    let map = store.triage_policy_map();
     super::super::load::<
         '_,
         IndexedMap,
@@ -128,8 +128,8 @@ impl TriagePolicyMutation {
             creation_time: Utc::now(),
         };
 
-        let db = ctx.data::<Arc<Store>>()?;
-        let map = db.triage_policy_map();
+        let store = crate::graphql::get_store(ctx).await?;
+        let map = store.triage_policy_map();
         let id = map.insert(triage)?;
 
         Ok(ID(id.to_string()))
@@ -145,7 +145,8 @@ impl TriagePolicyMutation {
         ctx: &Context<'_>,
         #[graphql(validator(min_items = 1))] ids: Vec<ID>,
     ) -> Result<Vec<String>> {
-        let map = ctx.data::<Arc<Store>>()?.triage_policy_map();
+        let store = crate::graphql::get_store(ctx).await?;
+        let map = store.triage_policy_map();
 
         let mut removed = Vec::<String>::with_capacity(ids.len());
         for id in ids {
@@ -174,8 +175,8 @@ impl TriagePolicyMutation {
     ) -> Result<ID> {
         let i = id.as_str().parse::<u32>().map_err(|_| "invalid ID")?;
 
-        let db = ctx.data::<Arc<Store>>()?;
-        let map = db.triage_policy_map();
+        let store = crate::graphql::get_store(ctx).await?;
+        let map = store.triage_policy_map();
         map.update(i, &old, &new)?;
 
         Ok(id)

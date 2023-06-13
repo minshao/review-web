@@ -19,7 +19,7 @@ use std::{
 };
 use tokio::{
     signal::unix::{signal, SignalKind},
-    sync::Notify,
+    sync::{Notify, RwLock},
 };
 use tracing::{error, info, metadata::LevelFilter};
 use tracing_appender::non_blocking::WorkerGuard;
@@ -277,6 +277,7 @@ async fn run(config: Config) -> Result<Arc<Notify>> {
         .context("failed to connect to the PostgreSQL database")?;
     let store = {
         let store = Store::new(config.data_dir(), config.backup_dir())
+            .map(RwLock::new)
             .map(Arc::new)
             .context("failed to connect to database")?;
         store

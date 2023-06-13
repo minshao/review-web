@@ -4,12 +4,9 @@ use async_graphql::{
     Context, Enum, InputObject, Object, Result, SimpleObject, Union,
 };
 use bincode::Options;
-use review_database::{IterableMap, Map, MapIterator, Store};
+use review_database::{IterableMap, Map, MapIterator};
 use serde::{Deserialize, Serialize};
-use std::{
-    convert::{TryFrom, TryInto},
-    sync::Arc,
-};
+use std::convert::{TryFrom, TryInto};
 
 #[derive(Default)]
 pub(super) struct TemplateQuery;
@@ -34,7 +31,7 @@ impl TemplateQuery {
             before,
             first,
             last,
-            |after, before, first, last| async move { load(ctx, after, before, first, last) },
+            |after, before, first, last| async move { load(ctx, after, before, first, last).await },
         )
         .await
     }
@@ -80,7 +77,8 @@ impl TemplateMutation {
 
         let name = template.name().to_string();
         let value = bincode::DefaultOptions::new().serialize(&template)?;
-        let map = ctx.data::<Arc<Store>>()?.template_map();
+        let store = crate::graphql::get_store(ctx).await?;
+        let map = store.template_map();
         map.put(name.as_bytes(), &value)?;
         Ok(name)
     }
@@ -90,7 +88,8 @@ impl TemplateMutation {
     #[graphql(guard = "RoleGuard::new(Role::SystemAdministrator)
         .or(RoleGuard::new(Role::SecurityAdministrator))")]
     async fn remove_template(&self, ctx: &Context<'_>, name: String) -> Result<String> {
-        let map = ctx.data::<Arc<Store>>()?.template_map();
+        let store = crate::graphql::get_store(ctx).await?;
+        let map = store.template_map();
         map.delete(name.as_bytes())?;
         Ok(name)
     }
@@ -129,7 +128,8 @@ impl TemplateMutation {
                 let old_value = bincode::DefaultOptions::new().serialize(&old_template)?;
                 let new_key = new_template.name().as_bytes();
                 let new_value = bincode::DefaultOptions::new().serialize(&new_template)?;
-                let map = ctx.data::<Arc<Store>>()?.template_map();
+                let store = crate::graphql::get_store(ctx).await?;
+                let map = store.template_map();
                 map.update((old_key, &old_value), (new_key, &new_value))?;
             }
             (None, Some(old_unstructured), None, Some(new_unstructured)) => {
@@ -148,7 +148,8 @@ impl TemplateMutation {
                 let old_value = bincode::DefaultOptions::new().serialize(&old_template)?;
                 let new_key = new_template.name().as_bytes();
                 let new_value = bincode::DefaultOptions::new().serialize(&new_template)?;
-                let map = ctx.data::<Arc<Store>>()?.template_map();
+                let store = crate::graphql::get_store(ctx).await?;
+                let map = store.template_map();
                 map.update((old_key, &old_value), (new_key, &new_value))?;
             }
             _ => {
@@ -261,20 +262,22 @@ struct TemplateTotalCount;
 impl TemplateTotalCount {
     /// The total number of edges.
     async fn total_count(&self, ctx: &Context<'_>) -> Result<usize> {
-        let map = ctx.data::<Arc<Store>>()?.template_map();
+        let store = crate::graphql::get_store(ctx).await?;
+        let map = store.template_map();
         let count = map.iter_forward()?.count();
         Ok(count)
     }
 }
 
-fn load(
+async fn load(
     ctx: &Context<'_>,
     after: Option<String>,
     before: Option<String>,
     first: Option<usize>,
     last: Option<usize>,
 ) -> Result<Connection<String, Template, TemplateTotalCount, EmptyFields>> {
-    let map = ctx.data::<Arc<Store>>()?.template_map();
+    let store = crate::graphql::get_store(ctx).await?;
+    let map = store.template_map();
     super::load::<'_, Map, MapIterator, Template, Template, TemplateTotalCount>(
         &map,
         after,

@@ -5,8 +5,7 @@ use async_graphql::{
     Context, Object, Result, SimpleObject,
 };
 use chrono::{DateTime, Utc};
-use review_database::{types::FromKeyValue, IterableMap, Store};
-use std::sync::Arc;
+use review_database::{types::FromKeyValue, IterableMap};
 
 #[derive(Default)]
 pub(super) struct TorExitNodeQuery;
@@ -31,7 +30,7 @@ impl TorExitNodeQuery {
             before,
             first,
             last,
-            |after, before, first, last| async move { load(ctx, after, before, first, last) },
+            |after, before, first, last| async move { load(ctx, after, before, first, last).await },
         )
         .await
     }
@@ -50,7 +49,8 @@ impl TorExitNodeMutation {
         ctx: &Context<'_>,
         ip_addresses: Vec<String>,
     ) -> Result<Vec<String>> {
-        let map = ctx.data::<Arc<Store>>()?.tor_exit_node_map();
+        let store = crate::graphql::get_store(ctx).await?;
+        let map = store.tor_exit_node_map();
         let timestamp = Utc::now().to_string();
         let entries = ip_addresses
             .iter()
@@ -88,20 +88,22 @@ struct TorExitNodeTotalCount;
 impl TorExitNodeTotalCount {
     /// The total number of edges.
     async fn total_count(&self, ctx: &Context<'_>) -> Result<usize> {
-        let map = ctx.data::<Arc<Store>>()?.tor_exit_node_map();
+        let store = crate::graphql::get_store(ctx).await?;
+        let map = store.tor_exit_node_map();
         let count = map.iter_forward()?.count();
         Ok(count)
     }
 }
 
-fn load(
+async fn load(
     ctx: &Context<'_>,
     after: Option<String>,
     before: Option<String>,
     first: Option<usize>,
     last: Option<usize>,
 ) -> Result<Connection<String, TorExitNode, TorExitNodeTotalCount, EmptyFields>> {
-    let map = ctx.data::<Arc<Store>>()?.tor_exit_node_map();
+    let store = crate::graphql::get_store(ctx).await?;
+    let map = store.tor_exit_node_map();
     super::load(&map, after, before, first, last, TorExitNodeTotalCount)
 }
 

@@ -56,7 +56,7 @@ use std::{
     path::PathBuf,
     sync::{Arc, Mutex},
 };
-use tokio::sync::Notify;
+use tokio::sync::{Notify, RwLock};
 use vinum::signal;
 
 /// GraphQL schema type.
@@ -125,7 +125,7 @@ pub trait CertManager: Send + Sync {
 /// every GraphQL API function.
 pub(super) fn schema<B>(
     db: Database,
-    store: Arc<Store>,
+    store: Arc<RwLock<Store>>,
     agent_manager: B,
     ip_locator: Option<Arc<Mutex<ip2location::DB>>>,
     cert_manager: Arc<dyn CertManager>,
@@ -298,6 +298,10 @@ where
         }?;
         Ok((nodes, false, has_more))
     }
+}
+
+async fn get_store<'a>(ctx: &Context<'a>) -> Result<tokio::sync::RwLockReadGuard<'a, Store>> {
+    Ok(ctx.data::<Arc<RwLock<Store>>>()?.read().await)
 }
 
 fn load_with_filter<'m, M, I, N, NI, T>(
@@ -542,7 +546,7 @@ impl AgentManager for MockAgentManager {
 #[cfg(test)]
 struct TestSchema {
     _dir: tempfile::TempDir, // to delete the data directory when dropped
-    store: Arc<Store>,
+    store: Arc<RwLock<Store>>,
     schema: Schema,
 }
 
@@ -553,8 +557,9 @@ impl TestSchema {
 
         let db_dir = tempfile::tempdir().unwrap();
         let backup_dir = tempfile::tempdir().unwrap();
-        let store = Arc::new(Store::new(db_dir.path(), backup_dir.path()).unwrap());
+        let store = Store::new(db_dir.path(), backup_dir.path()).unwrap();
         let _ = set_initial_admin_password(&store);
+        let store = Arc::new(RwLock::new(store));
         let agent_manager: BoxedAgentManager = Box::new(MockAgentManager {});
         let schema = Schema::build(
             Query::default(),
@@ -572,9 +577,13 @@ impl TestSchema {
         }
     }
 
-    fn event_database(&self) -> database::EventDb {
-        self.store.events()
+    async fn store(&self) -> tokio::sync::RwLockReadGuard<Store>{
+        self.store.read().await
     }
+
+    // fn event_database(&self) -> database::EventDb {
+    //     self.store.events()
+    // }
 
     async fn execute(&self, query: &str) -> async_graphql::Response {
         let request: async_graphql::Request = query.into();
