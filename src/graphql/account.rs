@@ -285,10 +285,6 @@ impl AccountMutation {
         .or(RoleGuard::new(super::Role::SecurityMonitor))")]
     async fn sign_out(&self, ctx: &Context<'_>, token: String) -> Result<String> {
         let store = ctx.data::<Arc<RwLock<Store>>>()?.read().await;
-        // let store = match store.read() {
-        //     Ok(s) => s,
-        //     Err(e) => return Err(e.to_string().into()),
-        // };
         revoke_token(&store, &token)?;
         let decoded_token = decode_token(&token)?;
         let username = decoded_token.sub;
