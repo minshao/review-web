@@ -14,7 +14,9 @@ impl DbManagementMutation {
     async fn backup(&self, ctx: &Context<'_>, num_of_backups_to_keep: u32) -> Result<bool> {
         let store = ctx.data::<Arc<RwLock<Store>>>()?;
 
-        Ok(backup::create(store, false, num_of_backups_to_keep).await.is_ok())
+        Ok(backup::create(store, false, num_of_backups_to_keep)
+            .await
+            .is_ok())
     }
 
     #[graphql(guard = "RoleGuard::new(Role::SystemAdministrator)

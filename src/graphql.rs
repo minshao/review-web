@@ -577,13 +577,9 @@ impl TestSchema {
         }
     }
 
-    async fn store(&self) -> tokio::sync::RwLockReadGuard<Store>{
+    async fn store(&self) -> tokio::sync::RwLockReadGuard<Store> {
         self.store.read().await
     }
-
-    // fn event_database(&self) -> database::EventDb {
-    //     self.store.events()
-    // }
 
     async fn execute(&self, query: &str) -> async_graphql::Response {
         let request: async_graphql::Request = query.into();

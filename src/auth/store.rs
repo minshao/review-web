@@ -36,7 +36,6 @@ pub fn insert_token(store: &Store, token: &str, username: &str) -> Result<()> {
 pub fn revoke_token(store: &Store, token: &str) -> Result<()> {
     let decoded_token = super::decode_token(token)?;
     let username = decoded_token.sub;
-
     let map = store.access_token_map();
     let value = map
         .get(username.as_bytes())?

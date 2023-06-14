@@ -86,12 +86,11 @@ async fn auth(
         (Some(_client), config) => {
             let bearer = bearer?;
             let roles = config.roles();
-            tracing::error!("get store");
+
             let store = state.store.read().await;
             let (_, role) = validate_token(&store, bearer.token())?;
 
             if roles.contains(&role) {
-                tracing::error!("release store");
                 Ok(next.run(req).await)
             } else {
                 Err(Error::Unauthorized("Access denied".to_string()))
