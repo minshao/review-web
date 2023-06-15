@@ -15,9 +15,7 @@ use serde::{Deserialize, Serialize};
 use std::{
     collections::HashSet,
     net::{AddrParseError, IpAddr},
-    sync::Arc,
 };
-use tokio::sync::RwLock;
 use tracing::info;
 
 #[allow(clippy::module_name_repetitions)]
@@ -44,7 +42,7 @@ impl AccountQuery {
     #[graphql(guard = "RoleGuard::new(super::Role::SystemAdministrator)
         .or(RoleGuard::new(super::Role::SecurityAdministrator))")]
     async fn account(&self, ctx: &Context<'_>, username: String) -> Result<Account> {
-        let store = ctx.data::<Arc<RwLock<Store>>>()?.read().await;
+        let store = crate::graphql::get_store(ctx).await?;
         let map = store.account_map();
         let inner = map
             .get(&username)?
@@ -78,7 +76,7 @@ impl AccountQuery {
     #[graphql(guard = "RoleGuard::new(super::Role::SystemAdministrator)
         .or(RoleGuard::new(super::Role::SecurityAdministrator))")]
     async fn signed_in_account_list(&self, ctx: &Context<'_>) -> Result<Vec<SignedInAccount>> {
-        let store = ctx.data::<Arc<RwLock<Store>>>()?.read().await;
+        let store = crate::graphql::get_store(ctx).await?;
         let map = store.access_token_map();
 
         let signed = map
@@ -115,7 +113,7 @@ impl AccountQuery {
         .or(RoleGuard::new(super::Role::SecurityManager))
         .or(RoleGuard::new(super::Role::SecurityMonitor))")]
     async fn expiration_time(&self, ctx: &Context<'_>) -> Result<i64> {
-        let store = ctx.data::<Arc<RwLock<Store>>>()?.read().await;
+        let store = crate::graphql::get_store(ctx).await?;
 
         expiration_time(&store)
     }
@@ -141,7 +139,7 @@ impl AccountMutation {
         allow_access_from: Option<Vec<String>>,
         max_parallel_sessions: Option<u32>,
     ) -> Result<String> {
-        let store = ctx.data::<Arc<RwLock<Store>>>()?.read().await;
+        let store = crate::graphql::get_store(ctx).await?;
         let table = store.account_map();
         if table.contains(&username)? {
             return Err("account already exists".into());
@@ -175,7 +173,7 @@ impl AccountMutation {
         ctx: &Context<'_>,
         #[graphql(validator(min_items = 1))] usernames: Vec<String>,
     ) -> Result<Vec<String>> {
-        let store = ctx.data::<Arc<RwLock<Store>>>()?.read().await;
+        let store = crate::graphql::get_store(ctx).await?;
         let map = store.account_map();
         let mut removed = Vec::with_capacity(usernames.len());
         for username in usernames {
@@ -230,7 +228,7 @@ impl AccountMutation {
         };
         let max_parallel_sessions = max_parallel_sessions.map(|m| (m.old, m.new));
 
-        let store = ctx.data::<Arc<RwLock<Store>>>()?.read().await;
+        let store = crate::graphql::get_store(ctx).await?;
         let map = store.account_map();
         map.update(
             username.as_bytes(),
@@ -251,7 +249,7 @@ impl AccountMutation {
         username: String,
         password: String,
     ) -> Result<AuthPayload> {
-        let store = ctx.data::<Arc<RwLock<Store>>>()?.read().await;
+        let store = crate::graphql::get_store(ctx).await?;
         let account_map = store.account_map();
 
         if let Some(mut account) = account_map.get(&username)? {
@@ -284,7 +282,7 @@ impl AccountMutation {
         .or(RoleGuard::new(super::Role::SecurityManager))
         .or(RoleGuard::new(super::Role::SecurityMonitor))")]
     async fn sign_out(&self, ctx: &Context<'_>, token: String) -> Result<String> {
-        let store = ctx.data::<Arc<RwLock<Store>>>()?.read().await;
+        let store = crate::graphql::get_store(ctx).await?;
         revoke_token(&store, &token)?;
         let decoded_token = decode_token(&token)?;
         let username = decoded_token.sub;
@@ -299,7 +297,7 @@ impl AccountMutation {
         .or(RoleGuard::new(super::Role::SecurityManager))
         .or(RoleGuard::new(super::Role::SecurityMonitor))")]
     async fn refresh_token(&self, ctx: &Context<'_>, token: String) -> Result<AuthPayload> {
-        let store = ctx.data::<Arc<RwLock<Store>>>()?.read().await;
+        let store = crate::graphql::get_store(ctx).await?;
         let decoded_token = decode_token(&token)?;
         let username = decoded_token.sub;
         let (new_token, expiration_time) = create_token(username.clone(), decoded_token.role)?;
@@ -319,7 +317,7 @@ impl AccountMutation {
     #[graphql(guard = "RoleGuard::new(super::Role::SystemAdministrator)
         .or(RoleGuard::new(super::Role::SecurityAdministrator))")]
     async fn update_expiration_time(&self, ctx: &Context<'_>, time: i64) -> Result<i64> {
-        let store = ctx.data::<Arc<RwLock<Store>>>()?.read().await;
+        let store = crate::graphql::get_store(ctx).await?;
         let map = store.account_policy_map();
         if let Some(value) = map.get(ACCOUNT_POLICY_KEY)? {
             let codec = bincode::DefaultOptions::new();
@@ -484,7 +482,7 @@ struct AccountTotalCount;
 impl AccountTotalCount {
     /// The total number of edges.
     async fn total_count(&self, ctx: &Context<'_>) -> Result<usize> {
-        let store = ctx.data::<Arc<RwLock<Store>>>()?.read().await;
+        let store = crate::graphql::get_store(ctx).await?;
         let map = store.account_map();
         let count = map.iter_forward()?.count();
         Ok(count)
@@ -498,7 +496,7 @@ async fn load(
     first: Option<usize>,
     last: Option<usize>,
 ) -> Result<Connection<String, Account, AccountTotalCount, EmptyFields>> {
-    let store = ctx.data::<Arc<RwLock<Store>>>()?.read().await;
+    let store = crate::graphql::get_store(ctx).await?;
     let map = store.account_map();
     super::load::<'_, Table<types::Account>, MapIterator, Account, types::Account, AccountTotalCount>(
         &map,

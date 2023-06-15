@@ -5,10 +5,8 @@ use async_graphql::{
     Context, Enum, InputObject, Object, Result,
 };
 use review_database::{
-    self as database, Indexed, IndexedMap, IndexedMapIterator, IndexedMapUpdate, Store,
+    self as database, Indexed, IndexedMap, IndexedMapIterator, IndexedMapUpdate,
 };
-use std::sync::Arc;
-use tokio::sync::RwLock;
 
 #[derive(Default)]
 pub(super) struct DataSourceQuery;
@@ -104,7 +102,7 @@ impl DataSourceMutation {
 
         validate_policy(ctx, &value.source, value.data_type).await?;
 
-        let store = ctx.data::<Arc<RwLock<Store>>>()?.read().await;
+        let store = crate::graphql::get_store(ctx).await?;
         let map = store.data_source_map();
 
         let id = map.insert(value)?;
@@ -117,7 +115,7 @@ impl DataSourceMutation {
     async fn remove_data_source(&self, ctx: &Context<'_>, id: ID) -> Result<String> {
         let i = id.as_str().parse::<u32>().map_err(|_| "invalid ID")?;
 
-        let store = ctx.data::<Arc<RwLock<Store>>>()?.read().await;
+        let store = crate::graphql::get_store(ctx).await?;
         let map = store.data_source_map();
 
         let key = map.remove(i)?;
@@ -138,7 +136,7 @@ impl DataSourceMutation {
     ) -> Result<ID> {
         let i = id.as_str().parse::<u32>().map_err(|_| "invalid ID")?;
 
-        let store = ctx.data::<Arc<RwLock<Store>>>()?.read().await;
+        let store = crate::graphql::get_store(ctx).await?;
         let map = store.data_source_map();
 
         map.update(i, &old, &new)?;
@@ -326,7 +324,7 @@ struct DataSourceTotalCount;
 impl DataSourceTotalCount {
     /// The total number of edges.
     async fn total_count(&self, ctx: &Context<'_>) -> Result<usize> {
-        let store = ctx.data::<Arc<RwLock<Store>>>()?.read().await;
+        let store = crate::graphql::get_store(ctx).await?;
         let map = store.data_source_map();
 
         Ok(map.count()?)
@@ -340,7 +338,7 @@ async fn load(
     first: Option<usize>,
     last: Option<usize>,
 ) -> Result<Connection<String, DataSource, DataSourceTotalCount, EmptyFields>> {
-    let store = ctx.data::<Arc<RwLock<Store>>>()?.read().await;
+    let store = crate::graphql::get_store(ctx).await?;
     let map = store.data_source_map();
 
     super::load::<
@@ -357,7 +355,7 @@ async fn validate_policy(ctx: &Context<'_>, policy: &str, kind: database::DataTy
     match kind {
         database::DataType::TimeSeries => {
             let policy = policy.parse::<u32>()?;
-            let store = ctx.data::<Arc<RwLock<Store>>>()?.read().await;
+            let store = crate::graphql::get_store(ctx).await?;
             let map = store.sampling_policy_map();
             let Some(_value) = map.get_by_id(policy)? else {
                 return Err("no such sampling policy".into())
