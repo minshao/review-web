@@ -326,14 +326,12 @@ impl DnsCovertChannel {
 
     async fn src_customer(&self, ctx: &Context<'_>) -> Result<Option<Customer>> {
         let store = crate::graphql::get_store(ctx).await?;
-
         let map = store.customer_map();
         find_ip_customer(&map, self.inner.src_addr)
     }
 
     async fn src_network(&self, ctx: &Context<'_>) -> Result<Option<Network>> {
         let store = crate::graphql::get_store(ctx).await?;
-
         let map = store.network_map();
         find_ip_network(&map, self.inner.src_addr)
     }
@@ -1113,7 +1111,6 @@ impl EventTotalCount {
     /// The total number of events.
     async fn total_count(&self, ctx: &Context<'_>) -> Result<usize> {
         let store = crate::graphql::get_store(ctx).await?;
-
         let events = store.events();
         let locator = if self.filter.has_country() {
             if let Ok(mutex) = ctx.data::<Arc<Mutex<ip2location::DB>>>() {
