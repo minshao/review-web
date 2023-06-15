@@ -184,9 +184,10 @@ async fn graphql_handler(
 
     match auth {
         Ok(auth) => {
-            let store = store.read().await;
-            let (username, role) = validate_token(&store, auth.token())?;
-            drop(store);
+            let (username, role) = {
+                let store = store.read().await;
+                validate_token(&store, auth.token())?
+            };
             Ok(schema
                 .execute(request.data(username).data(role))
                 .await
@@ -216,9 +217,11 @@ async fn graphql_ws_handler(
                     let auth_data = serde_json::from_value::<AuthData>(value)?;
                     let mut data = Data::default();
                     if let Some(token) = auth_data.auth.split_ascii_whitespace().last() {
-                        let store = store.read().await;
-                        let (username, role) = validate_token(&store, token)?;
-                        drop(store);
+                        let (username, role) = {
+                            let store = store.read().await;
+                            validate_token(&store, token)?
+                        };
+
                         data.insert(role);
                         data.insert(username);
                     }
