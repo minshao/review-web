@@ -9,17 +9,24 @@ Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
-- five new GraphQL API methods have been added:
-  - `trusted_user_agent_list`: Get the trusted user agent list.
-  - `insert_trusted_user_agents`: Insert the trusted user agents.
-  - `remove_trusted_user_agents`: Delete the trusted user agents.
-  - `update_trusted_user_agent`: Update the trusted user agent.
-  - `apply_trusted_user_agent`: Apply a list of trusted user agent to the all
-    `hog` associated with `REview`.
+- Added five new GraphQL API methods:
+  - `trusted_user_agent_list`: This new method allows users to retrieve the
+    trusted user agent list.
+  - `insert_trusted_user_agents`: This new feature enables users to insert
+    trusted user agents into the list.
+  - `remove_trusted_user_agents`: Users can now delete trusted user agents from
+    the list using this method.
+  - `update_trusted_user_agent`: This feature has been added to enable users to
+    update the details of a trusted user agent.
+  - `apply_trusted_user_agent`: This new method allows a list of trusted user
+    agents to be applied to all `hog` associated with `REview`.
 
 ### Changed
 
-- Modify the type of `port` to `u16` of `TorConnection` and `RepeatedHttpSessions`.
+- The `srcPort` and `dstPort` types in both `TorConnection` and
+  `RepeatedHttpSessions` have been changed. These types were previously
+  `!String` but have now been changed to `!Int`. This change will enhance data
+  consistency and reduce errors related to data type mismatches.
 
 ## [0.13.1] - 2023-06-16
 
@@ -235,6 +242,7 @@ across our system.
 
 - An initial version.
 
+[Unreleased]: https://github.com/petabi/review-web/compare/0.13.1...main
 [0.13.1]: https://github.com/petabi/review-web/compare/0.12.0...0.13.1
 [0.13.0]: https://github.com/petabi/review-web/compare/0.12.0...0.13.0
 [0.12.0]: https://github.com/petabi/review-web/compare/0.11.0...0.12.0
