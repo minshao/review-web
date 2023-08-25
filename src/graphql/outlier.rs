@@ -1,4 +1,4 @@
-use super::{always_true, model::Model, Role, RoleGuard, DEFAULT_CONNECTION_SIZE};
+use super::{always_true, model::ModelDigest, Role, RoleGuard, DEFAULT_CONNECTION_SIZE};
 use anyhow::anyhow;
 use async_graphql::{
     connection::{query, Connection, Edge, EmptyFields},
@@ -307,7 +307,7 @@ impl Outlier {
             .collect::<Vec<_>>())
     }
 
-    async fn model(&self, ctx: &Context<'_>) -> Result<Model> {
+    async fn model(&self, ctx: &Context<'_>) -> Result<ModelDigest> {
         let db = ctx.data::<Database>()?;
         Ok(db.load_model(self.model_id).await?.into())
     }
