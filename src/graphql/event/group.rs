@@ -231,10 +231,12 @@ impl EventGroupQuery {
 
         let start = filter
             .start
-            .map(|t| i128::from(t.timestamp_nanos()) << 64)
+            .map(|t| i128::from(t.timestamp_nanos_opt().unwrap_or_default()) << 64)
             .unwrap_or_default();
         let end = filter.end.map_or(i128::MAX, |t| {
-            let end = i128::from(t.timestamp_nanos()) << 64;
+            let end = t
+                .timestamp_nanos_opt()
+                .map_or(i128::MAX, |t| i128::from(t) << 64);
             if end > 0 {
                 end - 1
             } else {
@@ -311,10 +313,12 @@ async fn count_events<T>(
 
     let start = filter
         .start
-        .map(|t| i128::from(t.timestamp_nanos()) << 64)
+        .map(|t| i128::from(t.timestamp_nanos_opt().unwrap_or_default()) << 64)
         .unwrap_or_default();
     let end = filter.end.map_or(i128::MAX, |t| {
-        let end = i128::from(t.timestamp_nanos()) << 64;
+        let end = t
+            .timestamp_nanos_opt()
+            .map_or(i128::MAX, |t| i128::from(t) << 64);
         if end > 0 {
             end - 1
         } else {
@@ -369,10 +373,12 @@ async fn count_events_by_network(
 
     let start = filter
         .start
-        .map(|t| i128::from(t.timestamp_nanos()) << 64)
+        .map(|t| i128::from(t.timestamp_nanos_opt().unwrap_or_default()) << 64)
         .unwrap_or_default();
     let end = filter.end.map_or(i128::MAX, |t| {
-        let end = i128::from(t.timestamp_nanos()) << 64;
+        let end = t
+            .timestamp_nanos_opt()
+            .map_or(i128::MAX, |t| i128::from(t) << 64);
         if end > 0 {
             end - 1
         } else {

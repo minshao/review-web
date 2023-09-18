@@ -137,7 +137,7 @@ async fn load(
 fn key(source: &str, time: DateTime<Utc>) -> Vec<u8> {
     let mut key = Vec::new();
     key.extend_from_slice(source.as_bytes());
-    key.extend_from_slice(&time.timestamp_nanos().to_be_bytes());
+    key.extend_from_slice(&time.timestamp_nanos_opt().unwrap_or_default().to_be_bytes());
     key
 }
 

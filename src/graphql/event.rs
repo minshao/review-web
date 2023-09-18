@@ -80,8 +80,14 @@ impl EventStream {
         let (tx, rx) = unbounded();
         tokio::spawn(async move {
             let store = store.read().await;
-
-            if let Err(e) = fetch_events(&store, start.timestamp_nanos(), tx, fetch_time).await {
+            if let Err(e) = fetch_events(
+                &store,
+                start.timestamp_nanos_opt().unwrap_or_default(),
+                tx,
+                fetch_time,
+            )
+            .await
+            {
                 error!("{e:?}");
             }
         });
@@ -502,12 +508,14 @@ impl EventTotalCount {
         let iter = self.start.map_or_else(
             || events.iter_forward(),
             |start| {
-                let start = i128::from(start.timestamp_nanos()) << 64;
+                let start = i128::from(start.timestamp_nanos_opt().unwrap_or_default()) << 64;
                 events.iter_from(start, Direction::Forward)
             },
         );
         let last = if let Some(end) = self.end {
-            let end = i128::from(end.timestamp_nanos()) << 64;
+            let end = end
+                .timestamp_nanos_opt()
+                .map_or(i128::MAX, |e| i128::from(e) << 64);
             if end == 0 {
                 return Ok(0);
             }
@@ -824,7 +832,7 @@ async fn load(
 
 fn earliest(start: Option<DateTime<Utc>>, after: Option<String>) -> Result<i128> {
     let earliest = if let Some(start) = start {
-        let start = i128::from(start.timestamp_nanos()) << 64;
+        let start = i128::from(start.timestamp_nanos_opt().unwrap_or_default()) << 64;
         if let Some(after) = after {
             cmp::max(start, earliest_after(&after)?)
         } else {
@@ -840,7 +848,9 @@ fn earliest(start: Option<DateTime<Utc>>, after: Option<String>) -> Result<i128>
 
 fn latest(end: Option<DateTime<Utc>>, before: Option<String>) -> Result<i128> {
     let latest = if let Some(end) = end {
-        let end = i128::from(end.timestamp_nanos()) << 64;
+        let end = end
+            .timestamp_nanos_opt()
+            .map_or(i128::MAX, |s| i128::from(s) << 64);
         if end == 0 {
             return Err("invalid time `end`".into());
         }
