@@ -11,6 +11,10 @@ Versioning](https://semver.org/spec/v2.0.0.html).
 
 - Added `processList` graphql query to get the host's list of processes.
 
+### Changed
+
+- Updated review-database to 0.18.0.
+
 ### Fix
 
 - Fix to provide multiple `country codes`/`Customers` for events with multiple

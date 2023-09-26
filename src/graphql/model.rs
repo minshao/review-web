@@ -32,7 +32,7 @@ impl ModelQuery {
         before: Option<String>,
         first: Option<i32>,
         last: Option<i32>,
-    ) -> Result<Connection<String, Model, ModelTotalCount, EmptyFields>> {
+    ) -> Result<Connection<String, ModelDigest, ModelTotalCount, EmptyFields>> {
         query(
             after,
             before,
@@ -413,18 +413,18 @@ impl CsvColumnExtraConfig {
     }
 }
 
-pub(super) struct Model {
-    inner: database::Model,
+pub(super) struct ModelDigest {
+    inner: database::ModelDigest,
 }
 
-impl From<database::Model> for Model {
-    fn from(inner: database::Model) -> Self {
+impl From<database::ModelDigest> for ModelDigest {
+    fn from(inner: database::ModelDigest) -> Self {
         Self { inner }
     }
 }
 
 #[Object]
-impl Model {
+impl ModelDigest {
     async fn id(&self) -> ID {
         ID(self.inner.id.to_string())
     }
@@ -922,7 +922,7 @@ async fn load(
     before: Option<String>,
     first: Option<usize>,
     last: Option<usize>,
-) -> Result<Connection<String, Model, ModelTotalCount, EmptyFields>> {
+) -> Result<Connection<String, ModelDigest, ModelTotalCount, EmptyFields>> {
     let after = slicing::decode_cursor(&after)?;
     let before = slicing::decode_cursor(&before)?;
     let is_first = first.is_some();
@@ -935,16 +935,7 @@ async fn load(
         Connection::with_additional_fields(has_previous, has_next, ModelTotalCount);
     connection.edges.extend(rows.into_iter().map(|model| {
         let cursor = slicing::encode_cursor(model.id, &model.name);
-        Edge::new(
-            cursor,
-            database::Model {
-                id: model.id,
-                name: model.name,
-                data_source_id: model.data_source_id,
-                classification_id: model.classification_id,
-            }
-            .into(),
-        )
+        Edge::new(cursor, model.into())
     }));
     Ok(connection)
 }

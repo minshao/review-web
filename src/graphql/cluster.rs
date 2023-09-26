@@ -1,7 +1,7 @@
 use super::{
     category::Category,
     get_trend,
-    model::{Model, TopElementCountsByColumn},
+    model::{ModelDigest, TopElementCountsByColumn},
     qualifier::Qualifier,
     slicing,
     status::Status,
@@ -185,7 +185,7 @@ impl Cluster {
             .collect::<Vec<_>>())
     }
 
-    async fn model(&self, ctx: &Context<'_>) -> Result<Model> {
+    async fn model(&self, ctx: &Context<'_>) -> Result<ModelDigest> {
         let db = ctx.data::<Database>()?;
         Ok(db.load_model(self.model_id).await?.into())
     }
