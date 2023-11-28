@@ -24,13 +24,13 @@ impl IpLocationQuery {
         };
         let record = {
             if let Ok(mut locator) = mutex.lock() {
-                locator.ip_lookup(addr).ok()
+                locator.ip_lookup(addr).ok().map(std::convert::TryInto::try_into)
             } else {
                 None
             }
         };
 
-        Ok(record.map(std::convert::TryInto::try_into).transpose()?)
+        Ok(record.transpose()?)
     }
 }
 
@@ -57,7 +57,7 @@ struct IpLocation {
     usage_type: Option<String>,
 }
 
-impl TryFrom<ip2location::Record> for IpLocation {
+impl TryFrom<ip2location::Record<'_>> for IpLocation {
     type Error = &'static str;
     fn try_from(record: ip2location::Record) -> Result<Self, Self::Error> {
         use ip2location::Record;
@@ -65,23 +65,23 @@ impl TryFrom<ip2location::Record> for IpLocation {
             Record::LocationDb(record) => Ok(Self {
                 latitude: record.latitude,
                 longitude: record.longitude,
-                country: record.country.map(|c| c.short_name),
-                region: record.region,
-                city: record.city,
-                isp: record.isp,
-                domain: record.domain,
-                zip_code: record.zip_code,
-                time_zone: record.time_zone,
-                net_speed: record.net_speed,
-                idd_code: record.idd_code,
-                area_code: record.area_code,
-                weather_station_code: record.weather_station_code,
-                weather_station_name: record.weather_station_name,
-                mcc: record.mcc,
-                mnc: record.mnc,
-                mobile_brand: record.mobile_brand,
-                elevation: record.elevation,
-                usage_type: record.usage_type,
+                country: record.country.map(|c| c.short_name.to_string()),
+                region: record.region.map(|r| r.to_string()),
+                city: record.city.map(|r| r.to_string()),
+                isp: record.isp.map(|r| r.to_string()),
+                domain: record.domain.map(|r| r.to_string()),
+                zip_code: record.zip_code.map(|r| r.to_string()),
+                time_zone: record.time_zone.map(|r| r.to_string()),
+                net_speed: record.net_speed.map(|r| r.to_string()),
+                idd_code: record.idd_code.map(|r| r.to_string()),
+                area_code: record.area_code.map(|r| r.to_string()),
+                weather_station_code: record.weather_station_code.map(|r| r.to_string()),
+                weather_station_name: record.weather_station_name.map(|r| r.to_string()),
+                mcc: record.mcc.map(|r| r.to_string()),
+                mnc: record.mnc.map(|r| r.to_string()),
+                mobile_brand: record.mobile_brand.map(|r| r.to_string()),
+                elevation: record.elevation.map(|r| r.to_string()),
+                usage_type: record.usage_type.map(|r| r.to_string()),
             }),
             Record::ProxyDb(_) => Err("Failed to create IpLocation from ProxyDb record"),
         }

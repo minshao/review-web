@@ -151,7 +151,7 @@ async fn load_rounds_by_cluster(
     let limit = slicing::limit(first, last)?;
     let db = ctx.data::<Database>()?;
     let (model, batches) = db
-        .load_rounds_by_cluster(cluster, &after, &before, is_first)
+        .load_rounds_by_cluster(cluster, &after, &before, is_first, limit)
         .await?;
 
     let (batches, has_previous, has_next) = slicing::page_info(is_first, limit, batches);
