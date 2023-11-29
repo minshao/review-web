@@ -145,20 +145,20 @@ async fn load_rounds_by_cluster(
     first: Option<usize>,
     last: Option<usize>,
 ) -> Result<Connection<String, Round, TotalCountByCluster, EmptyFields, RoundsByCluster>> {
-    let after = slicing::decode_cursor(after)?.map(|(_, t)| t);
-    let before = slicing::decode_cursor(before)?.map(|(_, t)| t);
+    let after = slicing::decode_cursor(after)?.map(|(_, t)| i64_to_naive_date_time(t));
+    let before = slicing::decode_cursor(before)?.map(|(_, t)| i64_to_naive_date_time(t));
     let is_first = first.is_some();
     let limit = slicing::limit(first, last)?;
     let db = ctx.data::<Database>()?;
     let (model, batches) = db
-        .load_rounds_by_cluster(cluster, &after, &before, is_first, limit)
+        .load_rounds_by_cluster(cluster, &after, &before, is_first, limit + 1)
         .await?;
 
     let (batches, has_previous, has_next) = slicing::page_info(is_first, limit, batches);
     let batch_infos: Vec<_> = {
         let store = super::get_store(ctx).await?;
         let map = store.batch_info_map();
-        let iter = batches
+        batches
             .into_iter()
             .take(limit)
             .filter_map(|t| t.timestamp_nanos_opt())
@@ -168,18 +168,14 @@ async fn load_rounds_by_cluster(
                 } else {
                     None
                 }
-            });
-        if is_first {
-            iter.collect()
-        } else {
-            iter.rev().collect()
-        }
+            })
+            .collect()
     };
 
     let mut connection =
         Connection::with_additional_fields(has_previous, has_next, TotalCountByCluster { cluster });
     connection.edges.extend(batch_infos.into_iter().map(|row| {
-        let cursor = slicing::encode_cursor(cluster, i64_to_naive_date_time(row.inner.id));
+        let cursor = slicing::encode_cursor(cluster, row.inner.id);
         Edge::new(cursor, row.into())
     }));
     Ok(connection)
@@ -199,7 +195,7 @@ async fn load_rounds_by_model(
     let limit = slicing::limit(first, last)?;
     let store = super::get_store(ctx).await?;
     let map = store.batch_info_map();
-    let batch_infos: Vec<BatchInfo> = map.get_before_after(model, before, after)?;
+    let batch_infos: Vec<BatchInfo> = map.get_range(model, before, after, is_first, limit + 1)?;
 
     let (rows, has_previous, has_next) = slicing::page_info(is_first, limit, batch_infos);
     let mut connection =
