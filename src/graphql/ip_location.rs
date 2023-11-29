@@ -24,7 +24,10 @@ impl IpLocationQuery {
         };
         let record = {
             if let Ok(mut locator) = mutex.lock() {
-                locator.ip_lookup(addr).ok().map(std::convert::TryInto::try_into)
+                locator
+                    .ip_lookup(addr)
+                    .ok()
+                    .map(std::convert::TryInto::try_into)
             } else {
                 None
             }
