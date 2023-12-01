@@ -41,7 +41,7 @@ impl StatisticsQuery {
         before: Option<String>,
         first: Option<i32>,
         last: Option<i32>,
-    ) -> Result<Connection<String, Round, TotalCountByCluster, EmptyFields, RoundsByCluster>> {
+    ) -> Result<Connection<String, Round, TotalCountByCluster, EmptyFields, RoundByCluster>> {
         let cluster = cluster.as_str().parse()?;
         query(
             after,
@@ -67,7 +67,7 @@ impl StatisticsQuery {
         before: Option<String>,
         first: Option<i32>,
         last: Option<i32>,
-    ) -> Result<Connection<String, Round, TotalCountByModel, EmptyFields>> {
+    ) -> Result<Connection<String, Round, TotalCountByModel, EmptyFields, RoundByModel>> {
         let model = model.as_str().parse()?;
         query(
             after,
@@ -144,7 +144,7 @@ async fn load_rounds_by_cluster(
     before: &Option<String>,
     first: Option<usize>,
     last: Option<usize>,
-) -> Result<Connection<String, Round, TotalCountByCluster, EmptyFields, RoundsByCluster>> {
+) -> Result<Connection<String, Round, TotalCountByCluster, EmptyFields, RoundByCluster>> {
     let after = slicing::decode_cursor(after)?.map(|(_, t)| i64_to_naive_date_time(t));
     let before = slicing::decode_cursor(before)?.map(|(_, t)| i64_to_naive_date_time(t));
     let is_first = first.is_some();
@@ -188,7 +188,7 @@ async fn load_rounds_by_model(
     before: &Option<String>,
     first: Option<usize>,
     last: Option<usize>,
-) -> Result<Connection<String, Round, TotalCountByModel, EmptyFields>> {
+) -> Result<Connection<String, Round, TotalCountByModel, EmptyFields, RoundByModel>> {
     let after: Option<i64> = slicing::decode_cursor(after)?.map(|(_, t)| t);
     let before: Option<i64> = slicing::decode_cursor(before)?.map(|(_, t)| t);
     let is_first = first.is_some();
@@ -214,10 +214,18 @@ fn i64_to_naive_date_time(t: i64) -> NaiveDateTime {
         .unwrap_or_default()
 }
 
-struct RoundsByCluster;
+struct RoundByCluster;
 
-impl ConnectionNameType for RoundsByCluster {
+impl ConnectionNameType for RoundByCluster {
     fn type_name<T: crate::graphql::OutputType>() -> String {
-        "RoundsByClusterConnection".to_string()
+        "RoundByClusterConnection".to_string()
+    }
+}
+
+struct RoundByModel;
+
+impl ConnectionNameType for RoundByModel {
+    fn type_name<T: crate::graphql::OutputType>() -> String {
+        "RoundByModelConnection".to_string()
     }
 }
