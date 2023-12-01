@@ -16,6 +16,18 @@ Versioning](https://semver.org/spec/v2.0.0.html).
   - Stream through the `RankedOutlier` iterator, and repeat the behavior after a
     period of time.
 
+### Changed
+
+- Updated review-database to 0.21.0.
+- Updated `column_statistics` according to review-database 0.21.0
+  - Removed `event_range` argument.
+  - Changed the `time` argument to `Vec<NaiveDateTime>`.
+  - After adjustment, `column_statistics` now returns all column statistics of the
+    specified `cluster` and created at the batch timestamp listed in the `time` argument.
+  - The timestamp is now added to the return value field `batch_ts`, representing
+    the batch timestamp for the specified `Statistics`.
+  - The returned `Statistics` are now sorted according to `batch_ts` and `column_index`.
+
 ## [0.15.0] - 2023-11-15
 
 ### Changed
