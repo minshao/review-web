@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use super::{
     category::Category,
     get_trend,
@@ -14,8 +16,10 @@ use async_graphql::{
 };
 use chrono::NaiveDateTime;
 use chrono::{DateTime, Utc};
+use database::Store;
 use num_traits::ToPrimitive;
 use review_database::{self as database, Database};
+use tokio::sync::RwLock;
 
 #[derive(Default)]
 pub(super) struct ClusterQuery;
@@ -173,8 +177,9 @@ impl Cluster {
     }
 
     async fn category(&self, ctx: &Context<'_>) -> Result<Category> {
-        let db = ctx.data::<Database>()?;
-        Ok(db.load_category(self.category).await?.into())
+        let db = ctx.data::<Arc<RwLock<Store>>>()?.read().await;
+        let map = db.category_map();
+        Ok(map.get(u32::try_from(self.category)?)?.into())
     }
 
     async fn events(&self, _ctx: &Context<'_>) -> Result<Vec<DateTime<Utc>>> {
