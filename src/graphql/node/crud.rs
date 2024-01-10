@@ -371,36 +371,36 @@ pub fn get_node_settings(db: &Store) -> Result<Vec<Setting>> {
 
         let piglet: Option<ServerAddress> = if node.piglet {
             Some(ServerAddress {
-                web_addr: None,
-                rpc_addr: Some(SocketAddr::new(
+                web: None,
+                rpc: Some(SocketAddr::new(
                     node.piglet_review_ip
                         .unwrap_or_else(|| IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0))),
                     node.piglet_review_port.unwrap_or_default(),
                 )),
-                pub_addr: Some(SocketAddr::new(
+                public: Some(SocketAddr::new(
                     node.piglet_giganto_ip
                         .unwrap_or_else(|| IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0))),
                     node.piglet_giganto_port.unwrap_or_default(),
                 )),
-                ing_addr: Some(SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), 0)),
+                ing: Some(SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), 0)),
             })
         } else {
             None
         };
         let giganto = if node.giganto {
             Some(ServerAddress {
-                web_addr: Some(SocketAddr::new(
+                web: Some(SocketAddr::new(
                     node.giganto_graphql_ip
                         .unwrap_or_else(|| IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0))),
                     node.giganto_graphql_port.unwrap_or_default(),
                 )),
-                rpc_addr: None,
-                pub_addr: Some(SocketAddr::new(
+                rpc: None,
+                public: Some(SocketAddr::new(
                     node.giganto_publish_ip
                         .unwrap_or_else(|| IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0))),
                     node.giganto_publish_port.unwrap_or_default(),
                 )),
-                ing_addr: Some(SocketAddr::new(
+                ing: Some(SocketAddr::new(
                     node.giganto_ingestion_ip
                         .unwrap_or_else(|| IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0))),
                     node.giganto_ingestion_port.unwrap_or_default(),
@@ -420,36 +420,36 @@ pub fn get_node_settings(db: &Store) -> Result<Vec<Setting>> {
         };
         let reconverge = if node.reconverge {
             Some(ServerAddress {
-                web_addr: None,
-                rpc_addr: Some(SocketAddr::new(
+                web: None,
+                rpc: Some(SocketAddr::new(
                     node.reconverge_review_ip
                         .unwrap_or_else(|| IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0))),
                     node.reconverge_review_port.unwrap_or_default(),
                 )),
-                pub_addr: Some(SocketAddr::new(
+                public: Some(SocketAddr::new(
                     node.reconverge_giganto_ip
                         .unwrap_or_else(|| IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0))),
                     node.reconverge_giganto_port.unwrap_or_default(),
                 )),
-                ing_addr: None,
+                ing: None,
             })
         } else {
             None
         };
         let hog = if node.hog {
             Some(ServerAddress {
-                web_addr: None,
-                rpc_addr: Some(SocketAddr::new(
+                web: None,
+                rpc: Some(SocketAddr::new(
                     node.hog_review_ip
                         .unwrap_or_else(|| IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0))),
                     node.hog_review_port.unwrap_or_default(),
                 )),
-                pub_addr: Some(SocketAddr::new(
+                public: Some(SocketAddr::new(
                     node.hog_giganto_ip
                         .unwrap_or_else(|| IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0))),
                     node.hog_giganto_port.unwrap_or_default(),
                 )),
-                ing_addr: None,
+                ing: None,
             })
         } else {
             None
