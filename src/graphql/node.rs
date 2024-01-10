@@ -364,10 +364,10 @@ pub struct Setting {
 
 #[derive(Serialize)]
 pub struct ServerAddress {
-    web_addr: Option<SocketAddr>,
-    rpc_addr: Option<SocketAddr>,
-    pub_addr: Option<SocketAddr>,
-    ing_addr: Option<SocketAddr>,
+    web: Option<SocketAddr>,
+    rpc: Option<SocketAddr>,
+    public: Option<SocketAddr>,
+    ing: Option<SocketAddr>,
 }
 
 #[derive(Serialize)]
