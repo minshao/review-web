@@ -1,6 +1,3 @@
-use std::sync::Arc;
-use tokio::sync::RwLock;
-
 use super::{slicing, Role, RoleGuard};
 use async_graphql::{
     connection::{query, Connection, Edge, EmptyFields},
@@ -9,6 +6,8 @@ use async_graphql::{
 };
 use database::Store;
 use review_database::{self as database};
+use std::sync::Arc;
+use tokio::sync::RwLock;
 
 #[derive(Default)]
 pub(super) struct CategoryQuery;
