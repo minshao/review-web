@@ -376,7 +376,8 @@ async fn fetch_events(
                         block_list_tls_time = event_time + ADD_TIME_FOR_NEXT_COMPARE;
                     }
                 }
-                EventKind::Log => continue,
+                EventKind::ExtraThreat => continue,
+                EventKind::WindowsThreat | EventKind::NetworkThreat => todo!(),
             }
         }
     }
@@ -543,6 +544,9 @@ impl From<database::Event> for Event {
                 RecordType::Ssh(event) => Event::BlockListSsh(event.into()),
                 RecordType::Tls(event) => Event::BlockListTls(event.into()),
             },
+            database::Event::WindowsThreat(_)
+            | database::Event::NetworkThreat(_)
+            | database::Event::ExtraThreat(_) => todo!(),
         }
     }
 }
