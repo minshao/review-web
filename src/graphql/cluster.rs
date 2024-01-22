@@ -135,11 +135,14 @@ impl ClusterMutation {
         status: Option<ID>,
     ) -> Result<ID> {
         let db = ctx.data::<Database>()?;
+        let id_to_i32 = |v: ID| v.as_str().parse().ok();
+
+        let status = status.and_then(id_to_i32);
         db.update_cluster(
             id.as_str().parse()?,
-            category.and_then(|v| v.as_str().parse().ok()),
-            qualifier.and_then(|v| v.as_str().parse().ok()),
-            status.and_then(|v| v.as_str().parse().ok()),
+            category.and_then(id_to_i32),
+            qualifier.and_then(id_to_i32),
+            status,
         )
         .await?;
         Ok(id)
@@ -196,13 +199,19 @@ impl Cluster {
     }
 
     async fn qualifier(&self, ctx: &Context<'_>) -> Result<Qualifier> {
-        let db = ctx.data::<Database>()?;
-        Ok(db.load_qualifier(self.qualifier).await?.into())
+        let db = ctx.data::<Arc<RwLock<Store>>>()?.read().await;
+        let map = db.qualifier_map();
+        Ok(map
+            .get(u32::try_from(self.qualifier).expect("invalid id"))?
+            .into())
     }
 
     async fn status(&self, ctx: &Context<'_>) -> Result<Status> {
-        let db = ctx.data::<Database>()?;
-        Ok(db.load_status(self.status).await?.into())
+        let db = ctx.data::<Arc<RwLock<Store>>>()?.read().await;
+        let map = db.status_map();
+        Ok(map
+            .get(u32::try_from(self.status).expect("invalid id"))?
+            .into())
     }
 }
 
