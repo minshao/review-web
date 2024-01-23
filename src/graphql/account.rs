@@ -562,6 +562,269 @@ mod tests {
     use crate::graphql::TestSchema;
 
     #[tokio::test]
+    async fn pagination() {
+        let schema = TestSchema::new().await;
+        let res = schema.execute(r#"{accountList{totalCount}}"#).await;
+        let Value::Object(retval) = res.data else {
+            panic!("unexpected response: {:?}", res);
+        };
+        let Some(Value::Object(account_list)) = retval.get("accountList") else {
+            panic!("unexpected response: {:?}", retval);
+        };
+        let Some(Value::Number(total_count)) = account_list.get("totalCount") else {
+            panic!("unexpected response: {:?}", account_list);
+        };
+        assert_eq!(total_count.as_u64(), Some(1)); // By default, there is only one account, "admin".
+
+        // Insert 4 more accounts.
+        let res = schema
+            .execute(
+                r#"mutation {
+                insertAccount(
+                    username: "u1",
+                    password: "pw1",
+                    role: "SECURITY_ADMINISTRATOR",
+                    name: "User One",
+                    department: "Test"
+                )
+            }"#,
+            )
+            .await;
+        assert_eq!(res.data.to_string(), r#"{insertAccount: "u1"}"#);
+        let res = schema
+            .execute(
+                r#"mutation {
+                insertAccount(
+                    username: "u2",
+                    password: "pw2",
+                    role: "SECURITY_ADMINISTRATOR",
+                    name: "User Two",
+                    department: "Test"
+                )
+            }"#,
+            )
+            .await;
+        assert_eq!(res.data.to_string(), r#"{insertAccount: "u2"}"#);
+        let res = schema
+            .execute(
+                r#"mutation {
+                insertAccount(
+                    username: "u3",
+                    password: "pw3",
+                    role: "SECURITY_ADMINISTRATOR",
+                    name: "User Three",
+                    department: "Test"
+                )
+            }"#,
+            )
+            .await;
+        assert_eq!(res.data.to_string(), r#"{insertAccount: "u3"}"#);
+        let res = schema
+            .execute(
+                r#"mutation {
+                insertAccount(
+                    username: "u4",
+                    password: "pw4",
+                    role: "SECURITY_ADMINISTRATOR",
+                    name: "User Four",
+                    department: "Test"
+                )
+            }"#,
+            )
+            .await;
+        assert_eq!(res.data.to_string(), r#"{insertAccount: "u4"}"#);
+
+        // Retrieve the first page.
+        let res = schema
+            .execute(
+                r#"query {
+                    accountList(first: 2) {
+                        edges {
+                            node {
+                                username
+                            }
+                            cursor
+                        }
+                        pageInfo {
+                            hasNextPage
+                            startCursor
+                            endCursor
+                        }
+                    }
+                }"#,
+            )
+            .await;
+
+        // Check if `first` works.
+        let Value::Object(retval) = res.data else {
+            panic!("unexpected response: {:?}", res);
+        };
+        let Some(Value::Object(account_list)) = retval.get("accountList") else {
+            panic!("unexpected response: {:?}", retval);
+        };
+        let Some(Value::List(edges)) = account_list.get("edges") else {
+            panic!("unexpected response: {:?}", account_list);
+        };
+        assert_eq!(edges.len(), 2);
+        let Some(Value::Object(page_info)) = account_list.get("pageInfo") else {
+            panic!("unexpected response: {:?}", account_list);
+        };
+        let Some(Value::Boolean(has_next_page)) = page_info.get("hasNextPage") else {
+            panic!("unexpected response: {:?}", page_info);
+        };
+        assert_eq!(*has_next_page, true);
+        let Some(Value::String(end_cursor)) = page_info.get("endCursor") else {
+            panic!("unexpected response: {:?}", page_info);
+        };
+
+        // The first edge should be "admin".
+        let Some(Value::Object(edge)) = edges.get(0) else {
+            panic!("unexpected response: {:?}", edges);
+        };
+        let Some(Value::Object(node)) = edge.get("node") else {
+            panic!("unexpected response: {:?}", edge);
+        };
+        let Some(Value::String(username)) = node.get("username") else {
+            panic!("unexpected response: {:?}", node);
+        };
+        assert_eq!(username, "admin");
+
+        // The last edge should be "u1".
+        let Some(Value::Object(edge)) = edges.get(1) else {
+            panic!("unexpected response: {:?}", edges);
+        };
+        let Some(Value::Object(node)) = edge.get("node") else {
+            panic!("unexpected response: {:?}", edge);
+        };
+        let Some(Value::String(username)) = node.get("username") else {
+            panic!("unexpected response: {:?}", node);
+        };
+        assert_eq!(username, "u1");
+        let Some(Value::String(cursor)) = edge.get("cursor") else {
+            panic!("unexpected response: {:?}", edge);
+        };
+        assert_eq!(cursor, end_cursor);
+
+        // Retrieve the second page, with the cursor from the first page.
+        let res = schema
+            .execute(&format!(
+                "query {{
+                    accountList(first: 4, after: \"{end_cursor}\") {{
+                        edges {{
+                            node {{
+                                username
+                            }}
+                            cursor
+                        }}
+                        pageInfo {{
+                            hasNextPage
+                            startCursor
+                            endCursor
+                        }}
+                    }}
+                }}"
+            ))
+            .await;
+        let Value::Object(retval) = res.data else {
+            panic!("unexpected response: {:?}", res);
+        };
+        let Some(Value::Object(account_list)) = retval.get("accountList") else {
+            panic!("unexpected response: {:?}", retval);
+        };
+        let Some(Value::List(edges)) = account_list.get("edges") else {
+            panic!("unexpected response: {:?}", account_list);
+        };
+        assert_eq!(edges.len(), 3); // The number of remaining accounts.
+        let Some(Value::Object(page_info)) = account_list.get("pageInfo") else {
+            panic!("unexpected response: {:?}", account_list);
+        };
+        let Some(Value::Boolean(has_next_page)) = page_info.get("hasNextPage") else {
+            panic!("unexpected response: {:?}", page_info);
+        };
+        assert_eq!(*has_next_page, false);
+
+        // The first edge should be "u2".
+        let Some(Value::Object(edge)) = edges.get(0) else {
+            panic!("unexpected response: {:?}", edges);
+        };
+        let Some(Value::Object(node)) = edge.get("node") else {
+            panic!("unexpected response: {:?}", edge);
+        };
+        let Some(Value::String(username)) = node.get("username") else {
+            panic!("unexpected response: {:?}", node);
+        };
+        assert_eq!(username, "u2");
+
+        // Record the cursor of the first edge.
+        let Some(Value::String(cursor)) = edge.get("cursor") else {
+            panic!("unexpected response: {:?}", edge);
+        };
+
+        // The last edge should be "u4".
+        let Some(Value::Object(edge)) = edges.get(2) else {
+            panic!("unexpected response: {:?}", edges);
+        };
+        let Some(Value::Object(node)) = edge.get("node") else {
+            panic!("unexpected response: {:?}", edge);
+        };
+        let Some(Value::String(username)) = node.get("username") else {
+            panic!("unexpected response: {:?}", node);
+        };
+        assert_eq!(username, "u4");
+
+        // Retrieve backward.
+        let res = schema
+            .execute(&format!(
+                "query {{
+                            accountList(last: 1, before: \"{cursor}\") {{
+                                edges {{
+                                    node {{
+                                        username
+                                    }}
+                                }}
+                                pageInfo {{
+                                    hasPreviousPage
+                                    startCursor
+                                    endCursor
+                                }}
+                            }}
+                        }}"
+            ))
+            .await;
+
+        // Check if `last` works.
+        let Value::Object(retval) = res.data else {
+            panic!("unexpected response: {:?}", res);
+        };
+        let Some(Value::Object(account_list)) = retval.get("accountList") else {
+            panic!("unexpected response: {:?}", retval);
+        };
+        let Some(Value::List(edges)) = account_list.get("edges") else {
+            panic!("unexpected response: {:?}", account_list);
+        };
+        assert_eq!(edges.len(), 1);
+        let Some(Value::Object(page_info)) = account_list.get("pageInfo") else {
+            panic!("unexpected response: {:?}", account_list);
+        };
+        let Some(Value::Boolean(has_previous_page)) = page_info.get("hasPreviousPage") else {
+            panic!("unexpected response: {:?}", page_info);
+        };
+        assert_eq!(*has_previous_page, true);
+
+        // The first edge should be "u1".
+        let Some(Value::Object(edge)) = edges.get(0) else {
+            panic!("unexpected response: {:?}", edges);
+        };
+        let Some(Value::Object(node)) = edge.get("node") else {
+            panic!("unexpected response: {:?}", edge);
+        };
+        let Some(Value::String(username)) = node.get("username") else {
+            panic!("unexpected response: {:?}", node);
+        };
+        assert_eq!(username, "u1");
+    }
+
+    #[tokio::test]
     async fn remove_accounts() {
         let schema = TestSchema::new().await;
         let res = schema.execute(r#"{accountList{totalCount}}"#).await;
