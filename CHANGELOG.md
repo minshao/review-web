@@ -5,6 +5,17 @@ file is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and
 this project adheres to [Semantic
 Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- We've resolved an issue in the GraphQL API where the ordering of edges was
+  inconsistent when using `last`/`before` pagination arguments. According to the
+  GraphQL Cursor Connections Specification, the order of edges should remain the
+  same whether using `first`/`after` or `last`/`before`, provided all other
+  arguments are equal. Previously, our API returned edges in reverse order when
+  `last`/`before` was used, which was contrary to the specification.
+
 ## [0.17.0] - 2024-01-19
 
 ### Added
@@ -371,6 +382,7 @@ across our system.
 
 - An initial version.
 
+[Unreleased]: https://github.com/aicers/review-web/compare/0.17.0...main
 [0.17.0]: https://github.com/aicers/review-web/compare/0.16.0...0.17.0
 [0.16.0]: https://github.com/aicers/review-web/compare/0.15.0...0.16.0
 [0.15.0]: https://github.com/aicers/review-web/compare/0.14.5...0.15.0

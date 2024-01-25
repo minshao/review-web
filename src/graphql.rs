@@ -280,12 +280,13 @@ where
             map.iter_backward()?
         };
 
-        let (nodes, has_more) = if let Some(after) = after {
+        let (mut nodes, has_more) = if let Some(after) = after {
             let to = earliest_key(&after)?;
             iter_to_nodes_with_filter(iter, &to, cmp::Ordering::is_ge, filter, last)
         } else {
             iter_to_nodes_with_filter(iter, &[], always_true, filter, last)
         }?;
+        nodes.reverse();
         Ok((nodes, has_more, false))
     } else {
         let first = first.unwrap_or(DEFAULT_CONNECTION_SIZE);

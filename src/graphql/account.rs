@@ -755,11 +755,6 @@ mod tests {
         };
         assert_eq!(username, "u2");
 
-        // Record the cursor of the first edge.
-        let Some(Value::String(cursor)) = edge.get("cursor") else {
-            panic!("unexpected response: {:?}", edge);
-        };
-
         // The last edge should be "u4".
         let Some(Value::Object(edge)) = edges.get(2) else {
             panic!("unexpected response: {:?}", edges);
@@ -772,11 +767,16 @@ mod tests {
         };
         assert_eq!(username, "u4");
 
+        // Record the cursor of the last edge.
+        let Some(Value::String(cursor)) = edge.get("cursor") else {
+            panic!("unexpected response: {:?}", edge);
+        };
+
         // Retrieve backward.
         let res = schema
             .execute(&format!(
                 "query {{
-                            accountList(last: 1, before: \"{cursor}\") {{
+                            accountList(last: 3, before: \"{cursor}\") {{
                                 edges {{
                                     node {{
                                         username
@@ -802,7 +802,7 @@ mod tests {
         let Some(Value::List(edges)) = account_list.get("edges") else {
             panic!("unexpected response: {:?}", account_list);
         };
-        assert_eq!(edges.len(), 1);
+        assert_eq!(edges.len(), 3);
         let Some(Value::Object(page_info)) = account_list.get("pageInfo") else {
             panic!("unexpected response: {:?}", account_list);
         };
