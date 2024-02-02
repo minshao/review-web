@@ -9,7 +9,7 @@ use chrono::{DateTime, NaiveDateTime, TimeZone, Utc};
 use review_database::{
     self as database,
     types::{self},
-    Direction, IterableMap, Store,
+    Direction, Iterable, IterableMap, Store,
 };
 use serde::{Deserialize, Serialize};
 use std::{
