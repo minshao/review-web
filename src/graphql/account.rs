@@ -482,6 +482,8 @@ struct AccountTotalCount;
 impl AccountTotalCount {
     /// The total number of edges.
     async fn total_count(&self, ctx: &Context<'_>) -> Result<usize> {
+        use review_database::Iterable;
+
         let store = crate::graphql::get_store(ctx).await?;
         let map = store.account_map();
         let count = map.iter(Direction::Forward, None).count();
@@ -496,6 +498,8 @@ async fn load(
     mut first: Option<usize>,
     last: Option<usize>,
 ) -> Result<Connection<String, Account, AccountTotalCount, EmptyFields>> {
+    use review_database::UniqueKey;
+
     let store = crate::graphql::get_store(ctx).await?;
     let table = store.account_map();
 
@@ -537,7 +541,7 @@ async fn load(
         Connection::with_additional_fields(has_previous, has_next, AccountTotalCount);
     connection.edges.extend(nodes.into_iter().map(|node| {
         let Ok(node) = node else { unreachable!() };
-        Edge::new(super::encode_cursor(&node.username), node.into())
+        Edge::new(super::encode_cursor(&node.unique_key()), node.into())
     }));
     Ok(connection)
 }
@@ -549,15 +553,20 @@ fn collect_edges(
     to: Option<String>,
     count: usize,
 ) -> (Vec<anyhow::Result<review_database::types::Account>>, bool) {
+    use review_database::Iterable;
+
     let edges: Box<dyn Iterator<Item = _>> = if let Some(cursor) = from {
-        let mut edges: Box<dyn Iterator<Item = _>> =
-            Box::new((*table).iter(dir, Some(&cursor)).skip_while(move |item| {
-                if let Ok(x) = item {
-                    x.username == cursor
-                } else {
-                    false
-                }
-            }));
+        let mut edges: Box<dyn Iterator<Item = _>> = Box::new(
+            (*table)
+                .iter(dir, Some(cursor.as_bytes()))
+                .skip_while(move |item| {
+                    if let Ok(x) = item {
+                        x.username == cursor
+                    } else {
+                        false
+                    }
+                }),
+        );
         if let Some(cursor) = to {
             edges = Box::new(edges.take_while(move |item| {
                 if let Ok(x) = item {
