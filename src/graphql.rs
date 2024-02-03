@@ -428,8 +428,8 @@ fn decode_cursor(cursor: &str) -> Option<String> {
 }
 
 /// Encodes a cursor used in pagination.
-fn encode_cursor(cursor: &str) -> String {
-    BASE64.encode(cursor.as_bytes())
+fn encode_cursor(cursor: &[u8]) -> String {
+    BASE64.encode(cursor)
 }
 
 fn always_true(_ordering: cmp::Ordering) -> bool {
