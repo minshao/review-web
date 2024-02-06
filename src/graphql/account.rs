@@ -1,8 +1,8 @@
 use super::RoleGuard;
 use crate::auth::{create_token, decode_token, insert_token, revoke_token, update_jwt_expires_in};
 use async_graphql::{
-    connection::{query, Connection, Edge, EmptyFields},
-    Context, Enum, InputObject, Object, ObjectType, OutputType, Result, SimpleObject,
+    connection::{query, Connection, EmptyFields},
+    Context, Enum, InputObject, Object, Result, SimpleObject,
 };
 use bincode::Options;
 use chrono::{DateTime, NaiveDateTime, TimeZone, Utc};
@@ -11,12 +11,12 @@ use review_database::{
     types::{self},
     Direction, IterableMap, Store,
 };
-use serde::{de::DeserializeOwned, Deserialize, Serialize};
+use serde::{Deserialize, Serialize};
 use std::{
     collections::HashSet,
     net::{AddrParseError, IpAddr},
 };
-use tracing::{info, warn};
+use tracing::info;
 
 #[allow(clippy::module_name_repetitions)]
 #[derive(Clone, Serialize, SimpleObject)]
@@ -500,118 +500,7 @@ async fn load(
 ) -> Result<Connection<String, Account, AccountTotalCount, EmptyFields>> {
     let store = crate::graphql::get_store(ctx).await?;
     let table = store.account_map();
-    load(&table, after, before, first, last, AccountTotalCount)
-}
-
-fn load<R, N, A>(
-    table: &database::Table<'_, R>,
-    after: Option<String>,
-    before: Option<String>,
-    mut first: Option<usize>,
-    last: Option<usize>,
-    additional_fields: A,
-) -> Result<Connection<String, N, A, EmptyFields>>
-where
-    R: DeserializeOwned + database::UniqueKey,
-    N: From<R> + OutputType,
-    A: ObjectType,
-{
-    if first.is_some() && last.is_some() {
-        return Err("cannot provide both `first` and `last`".into());
-    }
-    if first.is_none() && last.is_none() {
-        first = Some(super::DEFAULT_CONNECTION_SIZE);
-    }
-
-    let after = if let Some(after) = after {
-        Some(super::decode_cursor(&after).ok_or("invalid cursor `after`")?)
-    } else {
-        None
-    };
-    let before = if let Some(before) = before {
-        Some(super::decode_cursor(&before).ok_or("invalid cursor `before`")?)
-    } else {
-        None
-    };
-
-    let (nodes, has_previous, has_next) = if let Some(first) = first {
-        let (nodes, has_more) = collect_edges(table, Direction::Forward, after, before, first);
-        (nodes, false, has_more)
-    } else {
-        let Some(last) = last else { unreachable!() };
-        let (mut nodes, has_more) = collect_edges(table, Direction::Reverse, before, after, last);
-        nodes.reverse();
-        (nodes, has_more, false)
-    };
-
-    for node in &nodes {
-        let Err(e) = node else { continue };
-        warn!("failed to load account: {}", e);
-        return Err("database error".into());
-    }
-
-    let mut connection =
-        Connection::with_additional_fields(has_previous, has_next, additional_fields);
-    connection.edges.extend(nodes.into_iter().map(|node| {
-        let Ok(node) = node else { unreachable!() };
-        Edge::new(super::encode_cursor(&node.unique_key()), node.into())
-    }));
-    Ok(connection)
-}
-
-fn collect_edges<R>(
-    table: &database::Table<'_, R>,
-    dir: Direction,
-    from: Option<String>,
-    to: Option<String>,
-    count: usize,
-) -> (Vec<anyhow::Result<R>>, bool)
-where
-    R: DeserializeOwned + database::UniqueKey,
-{
-    use database::Iterable;
-
-    let edges: Box<dyn Iterator<Item = _>> = if let Some(cursor) = from {
-        let mut edges: Box<dyn Iterator<Item = _>> = Box::new(
-            (*table)
-                .iter(dir, Some(cursor.as_bytes()))
-                .skip_while(move |item| {
-                    if let Ok(x) = item {
-                        x.unique_key() == cursor.as_bytes()
-                    } else {
-                        false
-                    }
-                }),
-        );
-        if let Some(cursor) = to {
-            edges = Box::new(edges.take_while(move |item| {
-                if let Ok(x) = item {
-                    x.unique_key().as_ref() < cursor.as_bytes()
-                } else {
-                    false
-                }
-            }));
-        }
-        edges
-    } else {
-        let mut edges: Box<dyn Iterator<Item = _>> = Box::new(table.iter(dir, None));
-        if let Some(cursor) = to {
-            edges = Box::new(edges.take_while(move |item| {
-                if let Ok(x) = item {
-                    x.unique_key().as_ref() < cursor.as_bytes()
-                } else {
-                    false
-                }
-            }));
-        }
-        edges
-    };
-    let mut nodes = edges.take(count + 1).collect::<Vec<_>>();
-    let has_more = nodes.len() > count;
-    if has_more {
-        nodes.pop();
-    }
-    (nodes, has_more)
+    super::load_edges(&table, after, before, first, last, AccountTotalCount)
 }
 
 /// Sets the initial administrator password.
