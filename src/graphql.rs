@@ -52,6 +52,7 @@ use num_traits::ToPrimitive;
 use review_database::{
     self as database, types::FromKeyValue, Database, Direction, IterableMap, Role, Store,
 };
+use serde::de::DeserializeOwned;
 use std::{
     cmp,
     collections::HashMap,
@@ -59,6 +60,7 @@ use std::{
     sync::{Arc, Mutex},
 };
 use tokio::sync::{Notify, RwLock};
+use tracing::warn;
 use vinum::signal;
 
 /// GraphQL schema type.
@@ -434,6 +436,117 @@ fn encode_cursor(cursor: &[u8]) -> String {
 
 fn always_true(_ordering: cmp::Ordering) -> bool {
     true
+}
+
+fn load_edges<R, N, A>(
+    table: &database::Table<'_, R>,
+    after: Option<String>,
+    before: Option<String>,
+    mut first: Option<usize>,
+    last: Option<usize>,
+    additional_fields: A,
+) -> Result<Connection<String, N, A, EmptyFields>>
+where
+    R: DeserializeOwned + database::UniqueKey,
+    N: From<R> + OutputType,
+    A: ObjectType,
+{
+    if first.is_some() && last.is_some() {
+        return Err("cannot provide both `first` and `last`".into());
+    }
+    if first.is_none() && last.is_none() {
+        first = Some(DEFAULT_CONNECTION_SIZE);
+    }
+
+    let after = if let Some(after) = after {
+        Some(decode_cursor(&after).ok_or("invalid cursor `after`")?)
+    } else {
+        None
+    };
+    let before = if let Some(before) = before {
+        Some(decode_cursor(&before).ok_or("invalid cursor `before`")?)
+    } else {
+        None
+    };
+
+    let (nodes, has_previous, has_next) = if let Some(first) = first {
+        let (nodes, has_more) = collect_edges(table, Direction::Forward, after, before, first);
+        (nodes, false, has_more)
+    } else {
+        let Some(last) = last else { unreachable!() };
+        let (mut nodes, has_more) = collect_edges(table, Direction::Reverse, before, after, last);
+        nodes.reverse();
+        (nodes, has_more, false)
+    };
+
+    for node in &nodes {
+        let Err(e) = node else { continue };
+        warn!("failed to load account: {}", e);
+        return Err("database error".into());
+    }
+
+    let mut connection =
+        Connection::with_additional_fields(has_previous, has_next, additional_fields);
+    connection.edges.extend(nodes.into_iter().map(|node| {
+        let Ok(node) = node else { unreachable!() };
+        Edge::new(encode_cursor(&node.unique_key()), node.into())
+    }));
+    Ok(connection)
+}
+
+fn collect_edges<R>(
+    table: &database::Table<'_, R>,
+    dir: Direction,
+    from: Option<String>,
+    to: Option<String>,
+    count: usize,
+) -> (Vec<anyhow::Result<R>>, bool)
+where
+    R: DeserializeOwned + database::UniqueKey,
+{
+    use database::Iterable;
+
+    let edges: Box<dyn Iterator<Item = _>> = if let Some(cursor) = from {
+        let mut edges: Box<dyn Iterator<Item = _>> = Box::new(
+            (*table)
+                .iter(dir, Some(cursor.as_bytes()))
+                .skip_while(move |item| {
+                    if let Ok(x) = item {
+                        x.unique_key() == cursor.as_bytes()
+                    } else {
+                        false
+                    }
+                }),
+        );
+        if let Some(cursor) = to {
+            edges = Box::new(edges.take_while(move |item| {
+                if let Ok(x) = item {
+                    x.unique_key().as_ref() < cursor.as_bytes()
+                } else {
+                    false
+                }
+            }));
+        }
+        edges
+    } else {
+        let mut edges: Box<dyn Iterator<Item = _>> = Box::new(table.iter(dir, None));
+        if let Some(cursor) = to {
+            edges = Box::new(edges.take_while(move |item| {
+                if let Ok(x) = item {
+                    x.unique_key().as_ref() < cursor.as_bytes()
+                } else {
+                    false
+                }
+            }));
+        }
+        edges
+    };
+    let mut nodes = edges.take(count + 1).collect::<Vec<_>>();
+    let has_more = nodes.len() > count;
+    if has_more {
+        nodes.pop();
+    }
+    (nodes, has_more)
 }
 
 struct RoleGuard {
