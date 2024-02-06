@@ -40,6 +40,7 @@ pub use self::cert::ParsedCertificate;
 pub use self::customer::get_customer_networks;
 pub use self::node::{get_customer_id_of_review_host, get_node_settings};
 pub use self::trusted_user_agent::get_trusted_user_agent_list;
+use async_graphql::connection::ConnectionNameType;
 use async_graphql::{
     connection::{Connection, Edge, EmptyFields},
     Context, Guard, MergedObject, MergedSubscription, ObjectType, OutputType, Result,
@@ -440,18 +441,19 @@ fn always_true(_ordering: cmp::Ordering) -> bool {
     true
 }
 
-fn load_edges<R, N, A>(
+fn load_edges<R, N, A, NodesField>(
     table: &database::Table<'_, R>,
     after: Option<String>,
     before: Option<String>,
     mut first: Option<usize>,
     last: Option<usize>,
     additional_fields: A,
-) -> Result<Connection<String, N, A, EmptyFields>>
+) -> Result<Connection<String, N, A, EmptyFields, NodesField>>
 where
     R: DeserializeOwned + database::UniqueKey,
     N: From<R> + OutputType,
     A: ObjectType,
+    NodesField: ConnectionNameType,
 {
     if first.is_some() && last.is_some() {
         return Err("cannot provide both `first` and `last`".into());

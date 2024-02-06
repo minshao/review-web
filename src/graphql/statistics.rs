@@ -75,7 +75,7 @@ impl StatisticsQuery {
             first,
             last,
             |after, before, first, last| async move {
-                load_rounds_by_model(ctx, model, &after, &before, first, last).await
+                load_rounds_by_model(ctx, model, after, before, first, last).await
             },
         )
         .await
@@ -184,27 +184,21 @@ async fn load_rounds_by_cluster(
 async fn load_rounds_by_model(
     ctx: &Context<'_>,
     model: i32,
-    after: &Option<String>,
-    before: &Option<String>,
+    after: Option<String>,
+    before: Option<String>,
     first: Option<usize>,
     last: Option<usize>,
 ) -> Result<Connection<String, Round, TotalCountByModel, EmptyFields, RoundByModel>> {
-    let after: Option<i64> = slicing::decode_cursor(after)?.map(|(_, t)| t);
-    let before: Option<i64> = slicing::decode_cursor(before)?.map(|(_, t)| t);
-    let is_first = first.is_some();
-    let limit = slicing::limit(first, last)?;
     let store = super::get_store(ctx).await?;
-    let map = store.batch_info_map();
-    let batch_infos: Vec<BatchInfo> = map.get_range(model, before, after, is_first, limit + 1)?;
-
-    let (rows, has_previous, has_next) = slicing::page_info(is_first, limit, batch_infos);
-    let mut connection =
-        Connection::with_additional_fields(has_previous, has_next, TotalCountByModel { model });
-    connection.edges.extend(rows.into_iter().map(|row| {
-        let cursor = slicing::encode_cursor(row.model, row.inner.id);
-        Edge::new(cursor, row.into())
-    }));
-    Ok(connection)
+    let table = store.batch_info_map();
+    super::load_edges(
+        &table,
+        after,
+        before,
+        first,
+        last,
+        TotalCountByModel { model },
+    )
 }
 
 fn i64_to_naive_date_time(t: i64) -> NaiveDateTime {
