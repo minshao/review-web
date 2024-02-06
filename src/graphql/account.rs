@@ -2,7 +2,7 @@ use super::RoleGuard;
 use crate::auth::{create_token, decode_token, insert_token, revoke_token, update_jwt_expires_in};
 use async_graphql::{
     connection::{query, Connection, Edge, EmptyFields},
-    Context, Enum, InputObject, Object, Result, SimpleObject,
+    Context, Enum, InputObject, Object, ObjectType, OutputType, Result, SimpleObject,
 };
 use bincode::Options;
 use chrono::{DateTime, NaiveDateTime, TimeZone, Utc};
@@ -495,14 +495,27 @@ async fn load(
     ctx: &Context<'_>,
     after: Option<String>,
     before: Option<String>,
-    mut first: Option<usize>,
+    first: Option<usize>,
     last: Option<usize>,
 ) -> Result<Connection<String, Account, AccountTotalCount, EmptyFields>> {
-    use review_database::UniqueKey;
-
     let store = crate::graphql::get_store(ctx).await?;
     let table = store.account_map();
+    load(&table, after, before, first, last, AccountTotalCount)
+}
 
+fn load<R, N, A>(
+    table: &database::Table<'_, R>,
+    after: Option<String>,
+    before: Option<String>,
+    mut first: Option<usize>,
+    last: Option<usize>,
+    additional_fields: A,
+) -> Result<Connection<String, N, A, EmptyFields>>
+where
+    R: DeserializeOwned + database::UniqueKey,
+    N: From<R> + OutputType,
+    A: ObjectType,
+{
     if first.is_some() && last.is_some() {
         return Err("cannot provide both `first` and `last`".into());
     }
@@ -522,11 +535,11 @@ async fn load(
     };
 
     let (nodes, has_previous, has_next) = if let Some(first) = first {
-        let (nodes, has_more) = collect_edges(&table, Direction::Forward, after, before, first);
+        let (nodes, has_more) = collect_edges(table, Direction::Forward, after, before, first);
         (nodes, false, has_more)
     } else {
         let Some(last) = last else { unreachable!() };
-        let (mut nodes, has_more) = collect_edges(&table, Direction::Reverse, before, after, last);
+        let (mut nodes, has_more) = collect_edges(table, Direction::Reverse, before, after, last);
         nodes.reverse();
         (nodes, has_more, false)
     };
@@ -538,7 +551,7 @@ async fn load(
     }
 
     let mut connection =
-        Connection::with_additional_fields(has_previous, has_next, AccountTotalCount);
+        Connection::with_additional_fields(has_previous, has_next, additional_fields);
     connection.edges.extend(nodes.into_iter().map(|node| {
         let Ok(node) = node else { unreachable!() };
         Edge::new(super::encode_cursor(&node.unique_key()), node.into())
