@@ -11,7 +11,7 @@ use review_database::{
     types::{self},
     Direction, IterableMap, Store,
 };
-use serde::{Deserialize, Serialize};
+use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use std::{
     collections::HashSet,
     net::{AddrParseError, IpAddr},
@@ -546,14 +546,17 @@ async fn load(
     Ok(connection)
 }
 
-fn collect_edges(
-    table: &review_database::Table<'_, review_database::types::Account>,
+fn collect_edges<R>(
+    table: &database::Table<'_, R>,
     dir: Direction,
     from: Option<String>,
     to: Option<String>,
     count: usize,
-) -> (Vec<anyhow::Result<review_database::types::Account>>, bool) {
-    use review_database::Iterable;
+) -> (Vec<anyhow::Result<R>>, bool)
+where
+    R: DeserializeOwned + database::UniqueKey,
+{
+    use database::Iterable;
 
     let edges: Box<dyn Iterator<Item = _>> = if let Some(cursor) = from {
         let mut edges: Box<dyn Iterator<Item = _>> = Box::new(
@@ -561,7 +564,7 @@ fn collect_edges(
                 .iter(dir, Some(cursor.as_bytes()))
                 .skip_while(move |item| {
                     if let Ok(x) = item {
-                        x.username == cursor
+                        x.unique_key() == cursor.as_bytes()
                     } else {
                         false
                     }
@@ -570,7 +573,7 @@ fn collect_edges(
         if let Some(cursor) = to {
             edges = Box::new(edges.take_while(move |item| {
                 if let Ok(x) = item {
-                    x.username < cursor
+                    x.unique_key().as_ref() < cursor.as_bytes()
                 } else {
                     false
                 }
@@ -582,7 +585,7 @@ fn collect_edges(
         if let Some(cursor) = to {
             edges = Box::new(edges.take_while(move |item| {
                 if let Ok(x) = item {
-                    x.username < cursor
+                    x.unique_key().as_ref() < cursor.as_bytes()
                 } else {
                     false
                 }
