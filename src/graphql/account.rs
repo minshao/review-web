@@ -482,8 +482,6 @@ struct AccountTotalCount;
 impl AccountTotalCount {
     /// The total number of edges.
     async fn total_count(&self, ctx: &Context<'_>) -> Result<usize> {
-        use review_database::Iterable;
-
         let store = crate::graphql::get_store(ctx).await?;
         let map = store.account_map();
         let count = map.iter(Direction::Forward, None).count();

@@ -508,8 +508,6 @@ fn collect_edges<R>(
 where
     R: DeserializeOwned + database::UniqueKey,
 {
-    use database::Iterable;
-
     let edges: Box<dyn Iterator<Item = _>> = if let Some(cursor) = from {
         let mut edges: Box<dyn Iterator<Item = _>> = Box::new(
             (*table)
