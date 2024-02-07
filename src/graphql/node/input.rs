@@ -2,7 +2,7 @@ use super::{Node, PortNumber}; //NicInput
 use anyhow::Context as AnyhowContext; //bail
 use async_graphql::{types::ID, InputObject, Result};
 use review_database::IndexedMapUpdate;
-use std::{collections::HashMap, net::IpAddr};
+use std::{borrow::Cow, collections::HashMap, net::IpAddr};
 
 #[allow(clippy::module_name_repetitions)]
 #[derive(Clone, InputObject)]
@@ -61,8 +61,8 @@ pub(super) struct NodeInput {
 impl IndexedMapUpdate for NodeInput {
     type Entry = Node;
 
-    fn key(&self) -> Option<&[u8]> {
-        Some(self.name.as_bytes())
+    fn key(&self) -> Option<Cow<[u8]>> {
+        Some(Cow::Borrowed(self.name.as_bytes()))
     }
 
     #[allow(clippy::too_many_lines)]

@@ -1,3 +1,5 @@
+use std::borrow::Cow;
+
 use super::{Role, RoleGuard};
 use async_graphql::{
     connection::{query, Connection, EmptyFields},
@@ -231,8 +233,8 @@ struct DataSourceUpdateInput {
 impl IndexedMapUpdate for DataSourceUpdateInput {
     type Entry = database::DataSource;
 
-    fn key(&self) -> Option<&[u8]> {
-        self.name.as_deref().map(str::as_bytes)
+    fn key(&self) -> Option<Cow<[u8]>> {
+        self.name.as_deref().map(str::as_bytes).map(Cow::Borrowed)
     }
 
     fn apply(&self, mut value: Self::Entry) -> Result<Self::Entry, anyhow::Error> {

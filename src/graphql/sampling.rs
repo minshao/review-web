@@ -12,7 +12,7 @@ use review_database::{
     Indexable, Indexed, IndexedMap, IndexedMapIterator, IndexedMapUpdate, IterableMap,
 };
 use serde::{Deserialize, Serialize};
-use std::net::IpAddr;
+use std::{borrow::Cow, net::IpAddr};
 
 #[derive(Default)]
 pub(super) struct SamplingPolicyQuery;
@@ -113,8 +113,8 @@ impl SamplingPolicyTotalCount {
 }
 
 impl Indexable for SamplingPolicy {
-    fn key(&self) -> &[u8] {
-        self.name.as_bytes()
+    fn key(&self) -> Cow<[u8]> {
+        Cow::Borrowed(self.name.as_bytes())
     }
 
     fn value(&self) -> Vec<u8> {
@@ -398,8 +398,8 @@ impl SamplingPolicyMutation {
 impl IndexedMapUpdate for SamplingPolicyInput {
     type Entry = SamplingPolicy;
 
-    fn key(&self) -> Option<&[u8]> {
-        Some(self.name.as_bytes())
+    fn key(&self) -> Option<Cow<[u8]>> {
+        Some(Cow::Borrowed(self.name.as_bytes()))
     }
 
     fn apply(&self, mut value: Self::Entry) -> Result<Self::Entry, anyhow::Error> {
