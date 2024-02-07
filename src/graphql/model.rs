@@ -9,8 +9,11 @@ use async_graphql::{
 };
 use bincode::Options;
 use chrono::NaiveDateTime;
+use database::Store;
 use num_traits::ToPrimitive;
 use review_database::{self as database, Database};
+use std::sync::Arc;
+use tokio::sync::RwLock;
 
 const DEFAULT_MIN_SLOPE: f64 = 10.0;
 const DEFAULT_MIN_ZERO_COUNT_FOR_TREND: u32 = 5;
@@ -52,10 +55,10 @@ impl ModelQuery {
         ctx: &Context<'_>,
         model: i32,
     ) -> Result<Option<CsvColumnExtraConfig>> {
-        let db = ctx.data::<Database>()?;
-        Ok(db
-            .load_csv_column_extra_config(model)
-            .await?
+        let db = ctx.data::<Arc<RwLock<Store>>>()?.read().await;
+        let map = db.csv_column_extra_map();
+        Ok(map
+            .get_by_model(model)?
             .map(|config| CsvColumnExtraConfig { inner: config }))
     }
 
@@ -266,17 +269,17 @@ impl ModelMutation {
         column_1: Option<Vec<bool>>,
         column_n: Option<Vec<bool>>,
     ) -> Result<ID> {
-        let db = ctx.data::<Database>()?;
-        Ok(ID(db
-            .add_column_extra(
+        let db = ctx.data::<Arc<RwLock<Store>>>()?.read().await;
+        let map = db.csv_column_extra_map();
+        Ok(ID(map
+            .insert(
                 model,
                 column_alias.as_deref(),
                 column_display.as_deref(),
                 column_top_n.as_deref(),
                 column_1.as_deref(),
                 column_n.as_deref(),
-            )
-            .await?
+            )?
             .to_string()))
     }
 
@@ -293,16 +296,16 @@ impl ModelMutation {
         column_1: Option<Vec<bool>>,
         column_n: Option<Vec<bool>>,
     ) -> Result<ID> {
-        let db = ctx.data::<Database>()?;
-        db.update_csv_column_extra(
+        let db = ctx.data::<Arc<RwLock<Store>>>()?.read().await;
+        let map = db.csv_column_extra_map();
+        map.update(
             id.as_str().parse()?,
             column_alias.as_deref(),
             column_display.as_deref(),
             column_top_n.as_deref(),
             column_1.as_deref(),
             column_n.as_deref(),
-        )
-        .await?;
+        )?;
         Ok(id)
     }
 }
