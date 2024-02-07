@@ -1,3 +1,5 @@
+use std::borrow::Cow;
+
 use super::{Role, RoleGuard};
 use async_graphql::{
     connection::{query, Connection, EmptyFields},
@@ -45,8 +47,8 @@ impl TriageResponseTotalCount {
 }
 
 impl Indexable for TriageResponse {
-    fn key(&self) -> &[u8] {
-        &self.key
+    fn key(&self) -> Cow<[u8]> {
+        Cow::Borrowed(&self.key)
     }
 
     fn value(&self) -> Vec<u8> {
@@ -224,8 +226,8 @@ impl super::TriageResponseMutation {
 impl IndexedMapUpdate for TriageResponseInput {
     type Entry = TriageResponse;
 
-    fn key(&self) -> Option<&[u8]> {
-        Some(&self.key)
+    fn key(&self) -> Option<Cow<[u8]>> {
+        Some(Cow::Borrowed(&self.key))
     }
 
     fn apply(&self, mut value: Self::Entry) -> Result<Self::Entry, anyhow::Error> {

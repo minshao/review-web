@@ -9,7 +9,7 @@ use async_graphql::{
 use bincode::Options;
 use review_database::{self as database, Indexable, Indexed, IndexedMapUpdate, IterableMap, Store};
 use serde::{Deserialize, Serialize};
-use std::sync::Arc;
+use std::{borrow::Cow, sync::Arc};
 use tokio::sync::RwLock;
 
 #[derive(Default)]
@@ -159,8 +159,8 @@ impl BlockNetwork {
 }
 
 impl Indexable for BlockNetwork {
-    fn key(&self) -> &[u8] {
-        self.name.as_bytes()
+    fn key(&self) -> Cow<[u8]> {
+        Cow::Borrowed(self.name.as_bytes())
     }
 
     fn value(&self) -> Vec<u8> {
@@ -184,8 +184,8 @@ struct BlockNetworkInput {
 impl IndexedMapUpdate for BlockNetworkInput {
     type Entry = BlockNetwork;
 
-    fn key(&self) -> Option<&[u8]> {
-        self.name.as_deref().map(str::as_bytes)
+    fn key(&self) -> Option<Cow<[u8]>> {
+        self.name.as_deref().map(str::as_bytes).map(Cow::Borrowed)
     }
 
     fn apply(&self, mut value: Self::Entry) -> Result<Self::Entry, anyhow::Error> {
