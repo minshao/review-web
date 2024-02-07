@@ -14,7 +14,7 @@ use review_database::{
     self as database, types::FromKeyValue, Indexed, IndexedMapIterator, IndexedMapUpdate,
     IndexedMultimap, IterableMap,
 };
-use std::{convert::TryInto, mem::size_of};
+use std::{borrow::Cow, convert::TryInto, mem::size_of};
 
 #[derive(Default)]
 pub(super) struct NetworkQuery;
@@ -171,8 +171,8 @@ struct NetworkUpdateInput {
 impl IndexedMapUpdate for NetworkUpdateInput {
     type Entry = database::NetworkEntry;
 
-    fn key(&self) -> Option<&[u8]> {
-        self.name.as_deref().map(str::as_bytes)
+    fn key(&self) -> Option<Cow<[u8]>> {
+        self.name.as_deref().map(str::as_bytes).map(Cow::Borrowed)
     }
 
     fn apply(&self, mut entry: Self::Entry) -> Result<Self::Entry, anyhow::Error> {

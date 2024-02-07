@@ -1,3 +1,5 @@
+use std::borrow::Cow;
+
 use super::{
     customer::{HostNetworkGroup, HostNetworkGroupInput},
     BoxedAgentManager, Role, RoleGuard,
@@ -158,8 +160,8 @@ impl AllowNetwork {
 }
 
 impl Indexable for AllowNetwork {
-    fn key(&self) -> &[u8] {
-        self.name.as_bytes()
+    fn key(&self) -> Cow<[u8]> {
+        Cow::Borrowed(self.name.as_bytes())
     }
 
     fn value(&self) -> Vec<u8> {
@@ -183,8 +185,8 @@ struct AllowNetworkInput {
 impl IndexedMapUpdate for AllowNetworkInput {
     type Entry = AllowNetwork;
 
-    fn key(&self) -> Option<&[u8]> {
-        self.name.as_deref().map(str::as_bytes)
+    fn key(&self) -> Option<Cow<[u8]>> {
+        self.name.as_deref().map(str::as_bytes).map(Cow::Borrowed)
     }
 
     fn apply(&self, mut value: Self::Entry) -> Result<Self::Entry, anyhow::Error> {

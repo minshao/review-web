@@ -11,7 +11,10 @@ use review_database::{
     self as database, types::FromKeyValue, Indexed, IndexedMap, IndexedMapIterator,
     IndexedMapUpdate, IterableMap, Store,
 };
-use std::convert::{TryFrom, TryInto};
+use std::{
+    borrow::Cow,
+    convert::{TryFrom, TryInto},
+};
 use tracing::error;
 
 #[derive(Default)]
@@ -405,8 +408,8 @@ struct CustomerUpdateInput {
 impl IndexedMapUpdate for CustomerUpdateInput {
     type Entry = database::Customer;
 
-    fn key(&self) -> Option<&[u8]> {
-        self.name.as_deref().map(str::as_bytes)
+    fn key(&self) -> Option<Cow<[u8]>> {
+        self.name.as_deref().map(str::as_bytes).map(Cow::Borrowed)
     }
 
     fn apply(&self, mut value: Self::Entry) -> Result<Self::Entry, anyhow::Error> {

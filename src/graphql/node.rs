@@ -14,6 +14,7 @@ use review_database::{Indexable, Indexed};
 use roxy::Process as RoxyProcess;
 use serde::{Deserialize, Serialize};
 use std::{
+    borrow::Cow,
     collections::HashMap,
     net::{IpAddr, SocketAddr},
 };
@@ -223,8 +224,8 @@ impl NodeTotalCount {
 }
 
 impl Indexable for Node {
-    fn key(&self) -> &[u8] {
-        self.name.as_bytes()
+    fn key(&self) -> Cow<[u8]> {
+        Cow::Borrowed(self.name.as_bytes())
     }
 
     fn value(&self) -> Vec<u8> {
@@ -335,8 +336,8 @@ impl NodeStatusTotalCount {
 }
 
 impl Indexable for NodeStatus {
-    fn key(&self) -> &[u8] {
-        self.name.as_bytes()
+    fn key(&self) -> Cow<[u8]> {
+        Cow::Borrowed(self.name.as_bytes())
     }
 
     fn value(&self) -> Vec<u8> {
