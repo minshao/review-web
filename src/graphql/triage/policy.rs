@@ -1,3 +1,5 @@
+use std::borrow::Cow;
+
 use super::{
     ConfidenceInput, PacketAttrInput, ResponseInput, TiInput, TriagePolicy, TriagePolicyInput,
     TriagePolicyMutation, TriagePolicyQuery,
@@ -184,8 +186,8 @@ impl TriagePolicyMutation {
 impl IndexedMapUpdate for TriagePolicyInput {
     type Entry = database::TriagePolicy;
 
-    fn key(&self) -> Option<&[u8]> {
-        Some(self.name.as_bytes())
+    fn key(&self) -> Option<Cow<[u8]>> {
+        Some(Cow::Borrowed(self.name.as_bytes()))
     }
 
     fn apply(&self, mut value: Self::Entry) -> Result<Self::Entry, anyhow::Error> {
