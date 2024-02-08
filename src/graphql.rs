@@ -439,8 +439,8 @@ fn always_true(_ordering: cmp::Ordering) -> bool {
     true
 }
 
-fn load_edges<R, N, A, NodesField>(
-    table: &database::Table<'_, R>,
+fn load_edges<I, R, N, A, NodesField>(
+    table: &I,
     after: Option<String>,
     before: Option<String>,
     mut first: Option<usize>,
@@ -448,6 +448,7 @@ fn load_edges<R, N, A, NodesField>(
     additional_fields: A,
 ) -> Result<Connection<String, N, A, EmptyFields, NodesField>>
 where
+    I: database::Iterable<R>,
     R: DeserializeOwned + database::UniqueKey,
     N: From<R> + OutputType,
     A: ObjectType,
@@ -496,14 +497,15 @@ where
     Ok(connection)
 }
 
-fn collect_edges<R>(
-    table: &database::Table<'_, R>,
+fn collect_edges<I, R>(
+    table: &I,
     dir: Direction,
     from: Option<String>,
     to: Option<String>,
     count: usize,
 ) -> (Vec<anyhow::Result<R>>, bool)
 where
+    I: database::Iterable<R>,
     R: DeserializeOwned + database::UniqueKey,
 {
     let edges: Box<dyn Iterator<Item = _>> = if let Some(cursor) = from {
