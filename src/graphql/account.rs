@@ -9,13 +9,10 @@ use chrono::{DateTime, NaiveDateTime, TimeZone, Utc};
 use review_database::{
     self as database,
     types::{self},
-    Direction, IterableMap, Store,
+    Direction, Store,
 };
 use serde::{Deserialize, Serialize};
-use std::{
-    collections::HashSet,
-    net::{AddrParseError, IpAddr},
-};
+use std::net::{AddrParseError, IpAddr};
 use tracing::info;
 
 #[allow(clippy::module_name_repetitions)]
@@ -76,33 +73,40 @@ impl AccountQuery {
     #[graphql(guard = "RoleGuard::new(super::Role::SystemAdministrator)
         .or(RoleGuard::new(super::Role::SecurityAdministrator))")]
     async fn signed_in_account_list(&self, ctx: &Context<'_>) -> Result<Vec<SignedInAccount>> {
+        use review_database::KeyValueIterable;
+        use std::collections::HashMap;
+
         let store = crate::graphql::get_store(ctx).await?;
         let map = store.access_token_map();
 
         let signed = map
-            .iter_forward()?
-            .filter_map(|(key, value)| {
-                bincode::DefaultOptions::new()
-                    .deserialize::<HashSet<String>>(&value)
+            .iter(Direction::Forward, None)
+            .filter_map(|e| {
+                let e = e.ok()?;
+                let username = e.username;
+                let exp_time = decode_token(&e.token)
                     .ok()
-                    .map(|tokens| SignedInAccount {
-                        username: String::from_utf8_lossy(&key).into_owned(),
-                        expire_times: tokens
-                            .iter()
-                            .filter_map(|token| {
-                                decode_token(token).ok().and_then(|decoded| {
-                                    let time = Utc.timestamp_nanos(decoded.exp * 1_000_000_000);
-                                    if Utc::now() < time {
-                                        Some(time)
-                                    } else {
-                                        None
-                                    }
-                                })
-                            })
-                            .collect::<Vec<DateTime<Utc>>>(),
-                    })
+                    .map(|t| Utc.timestamp_nanos(t.exp * 1_000_000_000))?;
+                if Utc::now() < exp_time {
+                    Some((username, exp_time))
+                } else {
+                    None
+                }
             })
-            .collect::<Vec<SignedInAccount>>();
+            .fold(
+                HashMap::new(),
+                |mut res: HashMap<_, Vec<_>>, (username, time)| {
+                    let e = res.entry(username).or_default();
+                    e.push(time);
+                    res
+                },
+            )
+            .into_iter()
+            .map(|(username, expire_times)| SignedInAccount {
+                username,
+                expire_times,
+            })
+            .collect::<Vec<_>>();
 
         Ok(signed)
     }
