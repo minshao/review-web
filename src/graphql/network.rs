@@ -266,12 +266,12 @@ impl Network {
         let codec = bincode::DefaultOptions::new();
         for &id in &self.inner.customer_ids {
             #[allow(clippy::cast_sign_loss)] // u32 stored as i32 in database
-            let Some(value) = map.get_by_id(id)?
+            let Some((_key, value)) = map.get_by_id(id)?
             else {
                 continue;
             };
             let customer = codec
-                .deserialize::<database::Customer>(value.as_ref())
+                .deserialize::<database::Customer>(&value)
                 .map_err(|_| "invalid value in database")?;
             customers.push(customer.into());
         }
