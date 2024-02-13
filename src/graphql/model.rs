@@ -444,8 +444,8 @@ impl ModelDigest {
             .get_by_id(self.inner.data_source_id as u32)
             .map_err(|_| "failed to read data source")?
         {
-            Some(value) => Ok(bincode::DefaultOptions::new()
-                .deserialize::<database::DataSource>(value.as_ref())?
+            Some((_key, value)) => Ok(bincode::DefaultOptions::new()
+                .deserialize::<database::DataSource>(&value)?
                 .into()),
             None => Err("no such data source".into()),
         }
