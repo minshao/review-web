@@ -51,12 +51,12 @@ impl CustomerQuery {
 
         let store = crate::graphql::get_store(ctx).await?;
         let map = store.customer_map();
-        let Some(value) = map.get_by_id(i)? else {
+        let Some((_key, value)) = map.get_by_id(i)? else {
             return Err("no such customer".into());
         };
         Ok(Customer {
             inner: bincode::DefaultOptions::new()
-                .deserialize(value.as_ref())
+                .deserialize(&value)
                 .map_err(|_| "invalid value in database")?,
         })
     }
@@ -551,9 +551,9 @@ pub fn get_customer_networks(db: &Store, customer_id: u32) -> Result<database::H
     let mut hosts = vec![];
     let mut networks = vec![];
     let mut ip_ranges = vec![];
-    if let Some(value) = map.get_by_id(customer_id)? {
+    if let Some((_key, value)) = map.get_by_id(customer_id)? {
         let customer = bincode::DefaultOptions::new()
-            .deserialize::<database::Customer>(value.as_ref())
+            .deserialize::<database::Customer>(&value)
             .map_err(|_| "invalid value in database")?;
         customer.networks.iter().for_each(|net| {
             hosts.extend(net.network_group.hosts());
