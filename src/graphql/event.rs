@@ -855,12 +855,12 @@ fn convert_customer_input(
             .as_str()
             .parse::<u32>()
             .context(format!("invalid ID: {}", id.as_str()))?;
-        let Some(value) = map.get_by_id(i)? else {
+        let Some((_key, value)) = map.get_by_id(i)? else {
             bail!("no such customer")
         };
         customers.push(
             codec
-                .deserialize(value.as_ref())
+                .deserialize(&value)
                 .context("invalid value in database")?,
         );
     }
@@ -929,11 +929,11 @@ fn convert_sensors(map: &IndexedMap, sensors: &[ID]) -> anyhow::Result<Vec<Strin
             .as_str()
             .parse::<u32>()
             .context(format!("invalid ID: {}", id.as_str()))?;
-        let Some(value) = map.get_by_id(i)? else {
+        let Some((_key, value)) = map.get_by_id(i)? else {
             bail!("no such sensor")
         };
         let value: super::node::Node = codec
-            .deserialize(value.as_ref())
+            .deserialize(&value)
             .context("invalid value in database")?;
 
         converted_sensors.push(value.hostname.clone());
@@ -952,12 +952,12 @@ fn convert_triage_input(
             .as_str()
             .parse::<u32>()
             .context(format!("invalid ID: {}", id.as_str()))?;
-        let Some(value) = map.get_by_id(i)? else {
+        let Some((_key, value)) = map.get_by_id(i)? else {
             bail!("no such customer")
         };
         triage_policies.push(
             codec
-                .deserialize(value.as_ref())
+                .deserialize(&value)
                 .context("invalid value in database")?,
         );
     }
