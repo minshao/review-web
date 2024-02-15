@@ -10,7 +10,7 @@ use chrono::{DateTime, TimeZone, Utc};
 pub use crud::{get_customer_id_of_review_host, get_node_settings};
 use input::NodeInput;
 use ipnet::Ipv4Net;
-use review_database::{Indexable, Indexed};
+use review_database::{types::FromKeyValue, Indexable, Indexed};
 use roxy::Process as RoxyProcess;
 use serde::{Deserialize, Serialize};
 use std::{
@@ -220,6 +220,12 @@ impl NodeTotalCount {
     async fn total_count(&self, ctx: &Context<'_>) -> Result<usize> {
         let store = crate::graphql::get_store(ctx).await?;
         Ok(store.node_map().count()?)
+    }
+}
+
+impl FromKeyValue for Node {
+    fn from_key_value(_key: &[u8], value: &[u8]) -> anyhow::Result<Self> {
+        Ok(bincode::DefaultOptions::new().deserialize(value)?)
     }
 }
 

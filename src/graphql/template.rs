@@ -4,7 +4,7 @@ use async_graphql::{
     Context, Enum, InputObject, Object, Result, SimpleObject, Union,
 };
 use bincode::Options;
-use review_database::{IterableMap, Map, MapIterator};
+use review_database::{types::FromKeyValue, IterableMap, Map, MapIterator};
 use serde::{Deserialize, Serialize};
 use std::convert::{TryFrom, TryInto};
 
@@ -191,6 +191,12 @@ struct UnstructuredClusteringTemplateInput {
 enum Template {
     Structured(StructuredClusteringTemplate),
     Unstructured(UnstructuredClusteringTemplate),
+}
+
+impl FromKeyValue for Template {
+    fn from_key_value(_key: &[u8], value: &[u8]) -> anyhow::Result<Self> {
+        Ok(bincode::DefaultOptions::new().deserialize(value)?)
+    }
 }
 
 impl Template {
