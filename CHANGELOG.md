@@ -20,6 +20,13 @@ Versioning](https://semver.org/spec/v2.0.0.html).
   same whether using `first`/`after` or `last`/`before`, provided all other
   arguments are equal. Previously, our API returned edges in reverse order when
   `last`/`before` was used, which was contrary to the specification.
+- Resolved a critical bug in the GraphQL API endpoint `updateCluster` where the
+  user-specified `status_id` was being overwritten when `qualifier_id` change is
+  requested at the same time.
+  - The issue has been addressed to ensure that the user-provided `status_id` is
+    now properly respected and retained.
+  - User expecting `status_id` change when `qualifier_id` is changed will need to
+    specify desired `qualifier_id` while updating cluster.
 
 ## [0.17.0] - 2024-01-19
 
