@@ -9,7 +9,8 @@ use async_graphql::{
 use bincode::Options;
 use chrono::{DateTime, Utc};
 use review_database::{
-    Indexable, Indexed, IndexedMap, IndexedMapIterator, IndexedMapUpdate, IterableMap,
+    types::FromKeyValue, Indexable, Indexed, IndexedMap, IndexedMapIterator, IndexedMapUpdate,
+    IterableMap,
 };
 use serde::{Deserialize, Serialize};
 
@@ -32,6 +33,12 @@ pub struct TriageResponse {
 impl TriageResponse {
     async fn id(&self) -> ID {
         ID(self.id.to_string())
+    }
+}
+
+impl FromKeyValue for TriageResponse {
+    fn from_key_value(_key: &[u8], value: &[u8]) -> anyhow::Result<Self> {
+        Ok(bincode::DefaultOptions::new().deserialize(value)?)
     }
 }
 
