@@ -9,7 +9,8 @@ use bincode::Options;
 use chrono::{DateTime, Utc};
 use oinq::RequestCode;
 use review_database::{
-    Indexable, Indexed, IndexedMap, IndexedMapIterator, IndexedMapUpdate, IterableMap,
+    types::FromKeyValue, Indexable, Indexed, IndexedMap, IndexedMapIterator, IndexedMapUpdate,
+    IterableMap,
 };
 use serde::{Deserialize, Serialize};
 use std::{borrow::Cow, net::IpAddr};
@@ -97,6 +98,12 @@ impl SamplingPolicy {
 
     async fn dst_ip(&self) -> Option<String> {
         self.dst_ip.as_ref().map(ToString::to_string)
+    }
+}
+
+impl FromKeyValue for SamplingPolicy {
+    fn from_key_value(_key: &[u8], value: &[u8]) -> anyhow::Result<Self> {
+        Ok(bincode::DefaultOptions::new().deserialize(value)?)
     }
 }
 
