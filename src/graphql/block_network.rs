@@ -7,6 +7,7 @@ use async_graphql::{
     Context, InputObject, Object, Result, ID,
 };
 use bincode::Options;
+use database::types::FromKeyValue;
 use review_database::{self as database, Indexable, Indexed, IndexedMapUpdate, IterableMap, Store};
 use serde::{Deserialize, Serialize};
 use std::{borrow::Cow, sync::Arc};
@@ -155,6 +156,12 @@ impl BlockNetwork {
 
     async fn networks(&self) -> HostNetworkGroup {
         (&self.networks).into()
+    }
+}
+
+impl FromKeyValue for BlockNetwork {
+    fn from_key_value(_key: &[u8], value: &[u8]) -> anyhow::Result<Self> {
+        Ok(bincode::DefaultOptions::new().deserialize(value)?)
     }
 }
 

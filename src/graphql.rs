@@ -53,7 +53,6 @@ use num_traits::ToPrimitive;
 use review_database::{
     self as database, types::FromKeyValue, Database, Direction, IterableMap, Role, Store,
 };
-use serde::de::DeserializeOwned;
 use std::{
     cmp,
     collections::HashMap,
@@ -451,7 +450,7 @@ fn load_edges<I, R, N, A, NodesField>(
 ) -> Result<Connection<String, N, A, EmptyFields, NodesField>>
 where
     I: database::Iterable<R>,
-    R: DeserializeOwned + database::UniqueKey,
+    R: database::types::FromKeyValue + database::UniqueKey,
     N: From<R> + OutputType,
     A: ObjectType,
     NodesField: ConnectionNameType,
@@ -508,7 +507,7 @@ fn collect_edges<I, R>(
 ) -> (Vec<anyhow::Result<R>>, bool)
 where
     I: database::Iterable<R>,
-    R: DeserializeOwned + database::UniqueKey,
+    R: database::types::FromKeyValue + database::UniqueKey,
 {
     let edges: Box<dyn Iterator<Item = _>> = if let Some(cursor) = from {
         let mut edges: Box<dyn Iterator<Item = _>> = Box::new(
