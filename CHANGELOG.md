@@ -20,6 +20,12 @@ Versioning](https://semver.org/spec/v2.0.0.html).
   same whether using `first`/`after` or `last`/`before`, provided all other
   arguments are equal. Previously, our API returned edges in reverse order when
   `last`/`before` was used, which was contrary to the specification.
+- When inserting a new filter using `filters.insert(new.name.clone(), new)`, the
+  function now checks for conflicts in the filter collection.
+  - If the `new.name` already exists, the function returns an error, preventing
+    unintentional or malicious deletion of any filter.
+  - This fix adds an extra layer of security, ensuring the integrity of the
+    filter collection.
 
 ## [0.17.0] - 2024-01-19
 

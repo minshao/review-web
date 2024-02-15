@@ -210,7 +210,9 @@ impl FilterMutation {
         }
 
         filters.remove(&old.name);
-        filters.insert(new.name.clone(), new);
+        if let Some(v) = filters.insert(new.name.clone(), new) {
+            return Err(format!("filter named {} already exists", v.name).into());
+        }
         let new_value = codec.serialize(&filters)?;
         map.update(
             (username.as_bytes(), old_value.as_ref()),
