@@ -5,6 +5,21 @@ file is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and
 this project adheres to [Semantic
 Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+
+- Updated the `ModelIndicator` GraphQL type. Added `name` field as the name of
+  the model indicator.
+- Changed the return type of `indicatorList` GraphQL query to `[ModelIndicator!]!`.
+
+### Removed
+
+- Removed the obsoleted `ModelIndicatorOutput` GraphQL type. This type was
+  previously used as return type of `indicatorList` GraphQL query. With
+  advancements and improvements in our system, this type is no longer necessary
+  and has been removed to streamline the codebase and enhance overall maintainability.
+
 ## [0.18.0] - 2024-02-26
 
 ### Added
@@ -405,30 +420,31 @@ Versioning](https://semver.org/spec/v2.0.0.html).
 
 - An initial version.
 
-[0.18.0]: https://github.com/aicers/review-web/compare/0.17.0...0.18.0
-[0.17.0]: https://github.com/aicers/review-web/compare/0.16.0...0.17.0
-[0.16.0]: https://github.com/aicers/review-web/compare/0.15.0...0.16.0
-[0.15.0]: https://github.com/aicers/review-web/compare/0.14.5...0.15.0
-[0.14.5]: https://github.com/aicers/review-web/compare/0.14.4...0.14.5
-[0.14.4]: https://github.com/aicers/review-web/compare/0.14.3...0.14.4
-[0.14.3]: https://github.com/aicers/review-web/compare/0.14.2...0.14.3
-[0.14.2]: https://github.com/aicers/review-web/compare/0.14.1...0.14.2
-[0.14.1]: https://github.com/aicers/review-web/compare/0.14.0...0.14.1
-[0.14.0]: https://github.com/aicers/review-web/compare/0.13.1...0.14.0
-[0.13.1]: https://github.com/aicers/review-web/compare/0.12.0...0.13.1
-[0.13.0]: https://github.com/aicers/review-web/compare/0.12.0...0.13.0
-[0.12.0]: https://github.com/aicers/review-web/compare/0.11.0...0.12.0
-[0.11.0]: https://github.com/aicers/review-web/compare/0.10.0...0.11.0
-[0.10.0]: https://github.com/aicers/review-web/compare/0.9.1...0.10.0
-[0.9.1]: https://github.com/aicers/review-web/compare/0.9.0...0.9.1
-[0.9.0]: https://github.com/aicers/review-web/compare/0.8.1...0.9.0
-[0.8.1]: https://github.com/aicers/review-web/compare/0.8.0...0.8.1
-[0.8.0]: https://github.com/aicers/review-web/compare/0.7.0...0.8.0
-[0.7.0]: https://github.com/aicers/review-web/compare/0.6.0...0.7.0
-[0.6.0]: https://github.com/aicers/review-web/compare/0.5.0...0.6.0
-[0.5.0]: https://github.com/aicers/review-web/compare/0.4.1...0.5.0
-[0.4.1]: https://github.com/aicers/review-web/compare/0.4.0...0.4.1
-[0.4.0]: https://github.com/aicers/review-web/compare/0.3.0...0.4.0
-[0.3.0]: https://github.com/aicers/review-web/compare/0.2.0...0.3.0
-[0.2.0]: https://github.com/aicers/review-web/compare/0.1.0...0.2.0
-[0.1.0]: https://github.com/aicers/review-web/tree/0.1.0
+[Unreleased]: https://github.com/aicers/review-web/compare/0.18.0...main
+[0.18.0]: <https://github.com/aicers/review-web/compare/0.17.0...0.18.0>
+[0.17.0]: <https://github.com/aicers/review-web/compare/0.16.0...0.17.0>
+[0.16.0]: <https://github.com/aicers/review-web/compare/0.15.0...0.16.0>
+[0.15.0]: <https://github.com/aicers/review-web/compare/0.14.5...0.15.0>
+[0.14.5]: <https://github.com/aicers/review-web/compare/0.14.4...0.14.5>
+[0.14.4]: <https://github.com/aicers/review-web/compare/0.14.3...0.14.4>
+[0.14.3]: <https://github.com/aicers/review-web/compare/0.14.2...0.14.3>
+[0.14.2]: <https://github.com/aicers/review-web/compare/0.14.1...0.14.2>
+[0.14.1]: <https://github.com/aicers/review-web/compare/0.14.0...0.14.1>
+[0.14.0]: <https://github.com/aicers/review-web/compare/0.13.1...0.14.0>
+[0.13.1]: <https://github.com/aicers/review-web/compare/0.12.0...0.13.1>
+[0.13.0]: <https://github.com/aicers/review-web/compare/0.12.0...0.13.0>
+[0.12.0]: <https://github.com/aicers/review-web/compare/0.11.0...0.12.0>
+[0.11.0]: <https://github.com/aicers/review-web/compare/0.10.0...0.11.0>
+[0.10.0]: <https://github.com/aicers/review-web/compare/0.9.1...0.10.0>
+[0.9.1]: <https://github.com/aicers/review-web/compare/0.9.0...0.9.1>
+[0.9.0]: <https://github.com/aicers/review-web/compare/0.8.1...0.9.0>
+[0.8.1]: <https://github.com/aicers/review-web/compare/0.8.0...0.8.1>
+[0.8.0]: <https://github.com/aicers/review-web/compare/0.7.0...0.8.0>
+[0.7.0]: <https://github.com/aicers/review-web/compare/0.6.0...0.7.0>
+[0.6.0]: <https://github.com/aicers/review-web/compare/0.5.0...0.6.0>
+[0.5.0]: <https://github.com/aicers/review-web/compare/0.4.1...0.5.0>
+[0.4.1]: <https://github.com/aicers/review-web/compare/0.4.0...0.4.1>
+[0.4.0]: <https://github.com/aicers/review-web/compare/0.3.0...0.4.0>
+[0.3.0]: <https://github.com/aicers/review-web/compare/0.2.0...0.3.0>
+[0.2.0]: <https://github.com/aicers/review-web/compare/0.1.0...0.2.0>
+[0.1.0]: <https://github.com/aicers/review-web/tree/0.1.0>
