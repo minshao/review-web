@@ -32,6 +32,12 @@ Versioning](https://semver.org/spec/v2.0.0.html).
     now properly respected and retained.
   - User expecting `status_id` change when `qualifier_id` is changed will need to
     specify desired `qualifier_id` while updating cluster.
+- When inserting a new filter using `filters.insert(new.name.clone(), new)`, the
+  function now checks for conflicts in the filter collection.
+  - If the `new.name` already exists, the function returns an error, preventing
+    unintentional or malicious deletion of any filter.
+  - This fix adds an extra layer of security, ensuring the integrity of the
+    filter collection.
 
 ## [0.17.0] - 2024-01-19
 
