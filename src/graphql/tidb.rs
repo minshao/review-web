@@ -54,8 +54,11 @@ impl TidbMutation {
     async fn insert_tidb(&self, ctx: &Context<'_>, dbfile: String) -> Result<TidbOutput> {
         let tidb = database::Tidb::new(&dbfile)?;
         let store = super::get_store(ctx).await?;
-        let (name, version) = tidb.insert(&store)?;
-        Ok(TidbOutput { name, version })
+        tidb.insert(&store)?;
+        Ok(TidbOutput {
+            name: tidb.name,
+            version: tidb.version,
+        })
     }
 
     /// Removes Tidb, returning the name and version of database that removed
@@ -92,8 +95,11 @@ impl TidbMutation {
     ) -> Result<TidbOutput> {
         let tidb = database::Tidb::new(&new)?;
         let store = super::get_store(ctx).await?;
-        let (name, version) = tidb.update(&store, &name)?;
-        Ok(TidbOutput { name, version })
+        tidb.update(&store, &name)?;
+        Ok(TidbOutput {
+            name: tidb.name,
+            version: tidb.version,
+        })
     }
 }
 

@@ -11,6 +11,11 @@ Versioning](https://semver.org/spec/v2.0.0.html).
 
 - Add `apply_target_id` field to `Node` struct for reverting node status.
 - Add `apply_in_progress` field to `Node` struct for reverting node status.
+- Added the following GraphQL API to access workflow tags:
+  - 'workflowTagList'
+  - 'insertWorkflowTag'
+  - 'removeWorkflowTag'
+  - 'updateWorkflowTag'
 
 ### Fixed
 
@@ -20,6 +25,13 @@ Versioning](https://semver.org/spec/v2.0.0.html).
   same whether using `first`/`after` or `last`/`before`, provided all other
   arguments are equal. Previously, our API returned edges in reverse order when
   `last`/`before` was used, which was contrary to the specification.
+- Resolved a critical bug in the GraphQL API endpoint `updateCluster` where the
+  user-specified `status_id` was being overwritten when `qualifier_id` change is
+  requested at the same time.
+  - The issue has been addressed to ensure that the user-provided `status_id` is
+    now properly respected and retained.
+  - User expecting `status_id` change when `qualifier_id` is changed will need to
+    specify desired `qualifier_id` while updating cluster.
 - When inserting a new filter using `filters.insert(new.name.clone(), new)`, the
   function now checks for conflicts in the filter collection.
   - If the `new.name` already exists, the function returns an error, preventing
