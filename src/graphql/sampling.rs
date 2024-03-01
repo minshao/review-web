@@ -180,12 +180,10 @@ impl SamplingPolicyQuery {
 
         let store = crate::graphql::get_store(ctx).await?;
         let map = store.sampling_policy_map();
-        let Some((_key, value)) = map.get_by_id(i)? else {
+        let Some(policy) = map.get_by_id(i)? else {
             return Err("no such sampling policy".into());
         };
-        Ok(bincode::DefaultOptions::new()
-            .deserialize(&value)
-            .map_err(|_| "invalid value in database")?)
+        Ok(policy)
     }
 }
 

@@ -1,6 +1,6 @@
 use std::borrow::Cow;
 
-use super::{Role, RoleGuard};
+use super::{sampling::SamplingPolicy, Role, RoleGuard};
 use async_graphql::{
     connection::{query, Connection, EmptyFields},
     types::ID,
@@ -359,7 +359,7 @@ async fn validate_policy(ctx: &Context<'_>, policy: &str, kind: database::DataTy
             let policy = policy.parse::<u32>()?;
             let store = crate::graphql::get_store(ctx).await?;
             let map = store.sampling_policy_map();
-            let Some(_value) = map.get_by_id(policy)? else {
+            let Some(_value) = map.get_by_id::<SamplingPolicy>(policy)? else {
                 return Err("no such sampling policy".into());
             };
             Ok(())

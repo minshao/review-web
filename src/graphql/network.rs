@@ -2,19 +2,16 @@ use super::{
     customer::{Customer, HostNetworkGroup, HostNetworkGroupInput},
     Role, RoleGuard,
 };
-use anyhow::Context as AnyhowContext;
+
 use async_graphql::{
     connection::{query, Connection, EmptyFields},
     types::ID,
     Context, InputObject, Object, Result,
 };
-use bincode::Options;
 use chrono::{DateTime, Utc};
-use review_database::{
-    self as database, types::FromKeyValue, Indexed, IndexedMapIterator, IndexedMapUpdate,
-    IndexedMultimap, IterableMap,
-};
-use std::{borrow::Cow, convert::TryInto, mem::size_of};
+use review_database::{self as database, Indexed};
+
+use std::{convert::TryInto, mem::size_of};
 
 #[derive(Default)]
 pub(super) struct NetworkQuery;
@@ -54,12 +51,10 @@ impl NetworkQuery {
 
         let store = crate::graphql::get_store(ctx).await?;
         let map = store.network_map();
-        let Some((key, value)) = map.get_kv_by_id(i)? else {
+        let Some(inner) = map.get(i)? else {
             return Err("no such network".into());
         };
-        Ok(Network {
-            inner: database::Network::from_key_value(key.as_ref(), value.as_ref())?,
-        })
+        Ok(Network { inner })
     }
 }
 
@@ -79,28 +74,17 @@ impl NetworkMutation {
         description: String,
         networks: HostNetworkGroupInput,
         customer_ids: Vec<u32>,
-        mut tag_ids: Vec<u32>,
+        tag_ids: Vec<u32>,
     ) -> Result<ID> {
-        tag_ids.sort_unstable();
-        tag_ids.dedup();
-
         let store = crate::graphql::get_store(ctx).await?;
         let map = store.network_map();
-        let mut key = Vec::with_capacity(name.len());
-        key.extend_from_slice(name.as_bytes());
-        key.resize(name.len() + size_of::<u32>(), 0);
-        let entry = database::NetworkEntry {
-            key,
-            value: database::NetworkEntryValue {
-                description,
-                networks: networks
-                    .try_into()
-                    .map_err(|_| "invalid IP or network address")?,
-                customer_ids,
-                tag_ids,
-                creation_time: Utc::now(),
-            },
-        };
+        let entry = review_database::Network::new(
+            name,
+            description,
+            networks.try_into()?,
+            customer_ids,
+            tag_ids,
+        );
         let id = map.insert(entry)?;
         Ok(ID(id.to_string()))
     }
@@ -153,8 +137,8 @@ impl NetworkMutation {
         let i = id.as_str().parse::<u32>().map_err(|_| "invalid ID")?;
 
         let store = crate::graphql::get_store(ctx).await?;
-        let map = store.network_map();
-        map.update(i, &old, &new)?;
+        let mut map = store.network_map();
+        map.update(i, &old.into(), &new.into())?;
         Ok(id)
     }
 }
@@ -168,71 +152,15 @@ struct NetworkUpdateInput {
     tag_ids: Option<Vec<u32>>,
 }
 
-impl IndexedMapUpdate for NetworkUpdateInput {
-    type Entry = database::NetworkEntry;
-
-    fn key(&self) -> Option<Cow<[u8]>> {
-        self.name.as_deref().map(str::as_bytes).map(Cow::Borrowed)
-    }
-
-    fn apply(&self, mut entry: Self::Entry) -> Result<Self::Entry, anyhow::Error> {
-        if let Some(name) = self.name.as_deref() {
-            let len = entry.key.len();
-            let mut index = [0_u8; size_of::<u32>()];
-            index.copy_from_slice(&entry.key[len - size_of::<u32>()..len]);
-            entry.key.clear();
-            entry.key.reserve(name.len() + size_of::<u32>());
-            entry.key.extend(name.as_bytes());
-            entry.key.extend(index);
-        }
-        if let Some(description) = self.description.as_deref() {
-            entry.value.description.clear();
-            entry.value.description.push_str(description);
-        }
-        if let Some(ref networks) = self.networks {
-            entry.value.networks = networks.clone().try_into().context("invalid network")?;
-        }
-        if let Some(customer_ids) = self.customer_ids.as_deref() {
-            entry.value.customer_ids.clear();
-            entry.value.customer_ids.extend(customer_ids.iter());
-        }
-        if let Some(tag_ids) = self.tag_ids.as_deref() {
-            entry.value.tag_ids.clear();
-            entry.value.tag_ids.extend(tag_ids.iter());
-        }
-        Ok(entry)
-    }
-
-    fn verify(&self, entry: &Self::Entry) -> bool {
-        if let Some(v) = self.name.as_deref() {
-            if v.len() + size_of::<u32>() != entry.key.len() {
-                return false;
-            }
-            if v.as_bytes() != &entry.key[..v.len()] {
-                return false;
-            }
-        }
-        if let Some(v) = self.description.as_deref() {
-            if v != entry.value.description {
-                return false;
-            }
-        }
-        if let Some(ref v) = self.networks {
-            if *v != entry.value.networks {
-                return false;
-            }
-        }
-        if let Some(v) = self.customer_ids.as_deref() {
-            if v != entry.value.customer_ids {
-                return false;
-            }
-        }
-        if let Some(v) = self.tag_ids.as_deref() {
-            if v != entry.value.tag_ids {
-                return false;
-            }
-        }
-        true
+impl From<NetworkUpdateInput> for review_database::NetworkUpdate {
+    fn from(input: NetworkUpdateInput) -> Self {
+        Self::new(
+            input.name,
+            input.description,
+            input.networks.and_then(|v| v.try_into().ok()),
+            input.customer_ids,
+            input.tag_ids,
+        )
     }
 }
 
@@ -263,23 +191,20 @@ impl Network {
         let store = crate::graphql::get_store(ctx).await?;
         let map = store.customer_map();
         let mut customers = Vec::new();
-        let codec = bincode::DefaultOptions::new();
+
         for &id in &self.inner.customer_ids {
             #[allow(clippy::cast_sign_loss)] // u32 stored as i32 in database
-            let Some((_key, value)) = map.get_by_id(id)?
+            let Some(customer) = map.get_by_id::<review_database::Customer>(id)?
             else {
                 continue;
             };
-            let customer = codec
-                .deserialize::<database::Customer>(&value)
-                .map_err(|_| "invalid value in database")?;
             customers.push(customer.into());
         }
         Ok(customers)
     }
 
     async fn tag_ids(&self) -> &[u32] {
-        &self.inner.tag_ids
+        self.inner.tag_ids()
     }
 
     async fn creation_time(&self) -> DateTime<Utc> {
@@ -314,52 +239,14 @@ async fn load(
 ) -> Result<Connection<String, Network, NetworkTotalCount, EmptyFields>> {
     let store = crate::graphql::get_store(ctx).await?;
     let map = store.network_map();
-    super::load::<
-        '_,
-        IndexedMultimap,
-        IndexedMapIterator,
-        Network,
-        database::Network,
-        NetworkTotalCount,
-    >(&map, after, before, first, last, NetworkTotalCount)
+    super::load_edges(&map, after, before, first, last, NetworkTotalCount)
 }
 
 pub(super) async fn remove_tag(ctx: &Context<'_>, tag_id: u32) -> Result<()> {
     let store = crate::graphql::get_store(ctx).await?;
     let map = store.network_map();
-    let mut updates = Vec::new();
-    for (key, value) in map.iter_forward()? {
-        let network = database::Network::from_key_value(key.as_ref(), value.as_ref())
-            .context("invalid network entry in database")?;
-        if !network.has_tag(tag_id) {
-            continue;
-        }
 
-        let old_tag_ids = network.tag_ids;
-        let mut new_tag_ids = old_tag_ids.clone();
-        new_tag_ids.retain(|&id| id != tag_id);
-        updates.push((network.id, old_tag_ids, new_tag_ids));
-    }
-
-    for (id, old_tag_ids, new_tag_ids) in updates {
-        let old = NetworkUpdateInput {
-            name: None,
-            description: None,
-            networks: None,
-            customer_ids: None,
-            tag_ids: Some(old_tag_ids),
-        };
-        let new = NetworkUpdateInput {
-            name: None,
-            description: None,
-            networks: None,
-            customer_ids: None,
-            tag_ids: Some(new_tag_ids),
-        };
-        map.update(id, &old, &new)
-            .map_err(|e| format!("failed to update network: {e}"))?;
-    }
-    Ok(())
+    Ok(map.remove_tag(tag_id)?)
 }
 
 #[cfg(test)]
