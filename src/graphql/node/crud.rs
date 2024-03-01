@@ -52,12 +52,10 @@ impl NodeQuery {
 
         let store = crate::graphql::get_store(ctx).await?;
         let map = store.node_map();
-        let Some((_key, value)) = map.get_by_id(i)? else {
+        let Some(node) = map.get_by_id(i)? else {
             return Err("no such node".into());
         };
-        Ok(bincode::DefaultOptions::new()
-            .deserialize(&value)
-            .map_err(|_| "invalid value in database")?)
+        Ok(node)
     }
 }
 

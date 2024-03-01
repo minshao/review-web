@@ -9,7 +9,6 @@ use async_graphql::{
     connection::{query, Connection, EmptyFields},
     Context, Object, Result, ID,
 };
-use bincode::Options;
 use chrono::Utc;
 use review_database::{
     self as database, Indexed, IndexedMap, IndexedMapIterator, IndexedMapUpdate,
@@ -57,14 +56,10 @@ impl TriagePolicyQuery {
 
         let store = crate::graphql::get_store(ctx).await?;
         let map = store.triage_policy_map();
-        let Some((_key, value)) = map.get_by_id(i)? else {
+        let Some(inner) = map.get_by_id(i)? else {
             return Err("no such triage policy".into());
         };
-        Ok(TriagePolicy {
-            inner: bincode::DefaultOptions::new()
-                .deserialize(&value)
-                .map_err(|_| "invalid value in database")?,
-        })
+        Ok(TriagePolicy { inner })
     }
 }
 

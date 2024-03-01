@@ -51,8 +51,8 @@ use review_database::{
     event::RecordType,
     find_ip_country,
     types::{Endpoint, EventCategory, FromKeyValue, HostNetworkGroup},
-    Direction, EventFilter, EventIterator, EventKind, IndexedMap, IndexedMultimap, IterableMap,
-    Store,
+    Direction, EventFilter, EventIterator, EventKind, Indexed, IndexedMap, IndexedTable, Iterable,
+    IterableMap, Store,
 };
 use std::{
     cmp,
@@ -652,9 +652,12 @@ fn find_ip_customer(map: &IndexedMap, addr: IpAddr) -> Result<Option<Customer>> 
     Ok(None)
 }
 
-fn find_ip_network(map: &IndexedMultimap, addr: IpAddr) -> Result<Option<Network>> {
-    for (key, value) in map.iter_forward()? {
-        let network = database::Network::from_key_value(key.as_ref(), value.as_ref())?;
+fn find_ip_network(
+    map: &IndexedTable<review_database::Network>,
+    addr: IpAddr,
+) -> Result<Option<Network>> {
+    for entry in map.iter(Direction::Forward, None) {
+        let network = entry?;
         if network.networks.contains(addr) {
             return Ok(Some(network.into()));
         }
@@ -848,27 +851,22 @@ fn convert_customer_input(
     map: &IndexedMap,
     customer_ids: &[ID],
 ) -> anyhow::Result<Vec<database::Customer>> {
-    let codec = bincode::DefaultOptions::new();
     let mut customers = Vec::with_capacity(customer_ids.len());
     for id in customer_ids {
         let i = id
             .as_str()
             .parse::<u32>()
             .context(format!("invalid ID: {}", id.as_str()))?;
-        let Some((_key, value)) = map.get_by_id(i)? else {
+        let Some(c) = map.get_by_id::<review_database::Customer>(i)? else {
             bail!("no such customer")
         };
-        customers.push(
-            codec
-                .deserialize(&value)
-                .context("invalid value in database")?,
-        );
+        customers.push(c);
     }
     Ok(customers)
 }
 
 fn convert_endpoint_input(
-    network_map: &IndexedMultimap,
+    network_map: &IndexedTable<review_database::Network>,
     endpoints: &[EndpointInput],
 ) -> anyhow::Result<Vec<Endpoint>> {
     let mut networks = Vec::with_capacity(endpoints.len());
@@ -881,14 +879,12 @@ fn convert_endpoint_input(
                 .as_str()
                 .parse::<u32>()
                 .context(format!("invalid ID: {}", id.as_str()))?;
-            let Some((key, value)) = network_map.get_kv_by_id(i)? else {
+            let Some(network) = network_map.get(i)? else {
                 bail!("no such network")
             };
             networks.push(Endpoint {
                 direction: endpoint.direction.map(Into::into),
-                network: database::Network::from_key_value(key.as_ref(), value.as_ref())
-                    .context("invalid value in database")?
-                    .networks,
+                network: network.networks,
             });
         } else if let Some(custom) = &endpoint.custom {
             let network = custom.try_into()?;
@@ -922,21 +918,17 @@ fn internal_customer_networks(map: &IndexedMap) -> anyhow::Result<Vec<HostNetwor
 }
 
 fn convert_sensors(map: &IndexedMap, sensors: &[ID]) -> anyhow::Result<Vec<String>> {
-    let codec = bincode::DefaultOptions::new();
     let mut converted_sensors: Vec<String> = Vec::with_capacity(sensors.len());
     for id in sensors {
         let i = id
             .as_str()
             .parse::<u32>()
             .context(format!("invalid ID: {}", id.as_str()))?;
-        let Some((_key, value)) = map.get_by_id(i)? else {
+        let Some(node): Option<super::node::Node> = map.get_by_id(i)? else {
             bail!("no such sensor")
         };
-        let value: super::node::Node = codec
-            .deserialize(&value)
-            .context("invalid value in database")?;
 
-        converted_sensors.push(value.hostname.clone());
+        converted_sensors.push(node.hostname.clone());
     }
     Ok(converted_sensors)
 }
@@ -945,21 +937,16 @@ fn convert_triage_input(
     map: &IndexedMap,
     triage_policy_ids: &[ID],
 ) -> anyhow::Result<Vec<database::TriagePolicy>> {
-    let codec = bincode::DefaultOptions::new();
     let mut triage_policies = Vec::with_capacity(triage_policy_ids.len());
     for id in triage_policy_ids {
         let i = id
             .as_str()
             .parse::<u32>()
             .context(format!("invalid ID: {}", id.as_str()))?;
-        let Some((_key, value)) = map.get_by_id(i)? else {
+        let Some(policy) = map.get_by_id(i)? else {
             bail!("no such customer")
         };
-        triage_policies.push(
-            codec
-                .deserialize(&value)
-                .context("invalid value in database")?,
-        );
+        triage_policies.push(policy);
     }
     Ok(triage_policies)
 }

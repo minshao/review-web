@@ -1,12 +1,8 @@
 use super::{from_filter_input, EventListFilterInput};
 use crate::graphql::{Role, RoleGuard};
-use anyhow::Context as AnyhowContext;
 use async_graphql::{Context, Object, OutputType, Result, SimpleObject};
-use review_database::{
-    self as database,
-    types::{EventCategory, FromKeyValue},
-    Direction, Event, EventFilter, IndexedMultimap, IterableMap,
-};
+use database::{EventCategory, IndexedTable, Iterable};
+use review_database::{self as database, Direction, Event, EventFilter};
 use std::{
     collections::HashMap,
     num::NonZeroU8,
@@ -422,11 +418,12 @@ async fn count_events_by_network(
     Ok((values, counts))
 }
 
-fn load_networks(map: &IndexedMultimap) -> anyhow::Result<Vec<database::Network>> {
+fn load_networks(
+    map: &IndexedTable<review_database::Network>,
+) -> anyhow::Result<Vec<review_database::Network>> {
     let mut networks = Vec::new();
-    for (key, value) in map.iter_forward()? {
-        let network = database::Network::from_key_value(&key, &value)
-            .context("invalid network in database")?;
+    for entry in map.iter(Direction::Forward, None) {
+        let network = entry?;
         networks.push(network);
     }
     Ok(networks)

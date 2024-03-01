@@ -7,7 +7,6 @@ use async_graphql::{
     types::ID,
     Context, Object, Result, SimpleObject,
 };
-use bincode::Options;
 use chrono::NaiveDateTime;
 use database::Store;
 use num_traits::ToPrimitive;
@@ -437,16 +436,15 @@ impl ModelDigest {
     }
 
     async fn data_source(&self, ctx: &Context<'_>) -> Result<DataSource> {
+        use review_database::Indexed;
         let store = crate::graphql::get_store(ctx).await?;
         let map = store.data_source_map();
         #[allow(clippy::cast_sign_loss)] // u32 stored as i32 in the database
         match map
-            .get_by_id(self.inner.data_source_id as u32)
+            .get_by_id::<review_database::DataSource>(self.inner.data_source_id as u32)
             .map_err(|_| "failed to read data source")?
         {
-            Some((_key, value)) => Ok(bincode::DefaultOptions::new()
-                .deserialize::<database::DataSource>(&value)?
-                .into()),
+            Some(ds) => Ok(ds.into()),
             None => Err("no such data source".into()),
         }
     }
