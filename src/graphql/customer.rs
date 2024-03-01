@@ -8,8 +8,7 @@ use async_graphql::{
 use bincode::Options;
 use chrono::{DateTime, Utc};
 use review_database::{
-    self as database, types::FromKeyValue, Indexed, IndexedMap, IndexedMapIterator,
-    IndexedMapUpdate, IterableMap, Store,
+    self as database, Indexed, IndexedMap, IndexedMapIterator, IndexedMapUpdate, Store,
 };
 use std::{
     borrow::Cow,
@@ -51,14 +50,10 @@ impl CustomerQuery {
 
         let store = crate::graphql::get_store(ctx).await?;
         let map = store.customer_map();
-        let Some((_key, value)) = map.get_by_id(i)? else {
+        let Some(inner) = map.get_by_id(i)? else {
             return Err("no such customer".into());
         };
-        Ok(Customer {
-            inner: bincode::DefaultOptions::new()
-                .deserialize(&value)
-                .map_err(|_| "invalid value in database")?,
-        })
+        Ok(Customer { inner })
     }
 }
 
@@ -120,19 +115,7 @@ impl CustomerMutation {
                 let i = id.as_str().parse::<u32>().map_err(|_| "invalid ID")?;
                 let key = map.deactivate(i)?;
 
-                for (key, value) in network_map
-                    .iter_forward()
-                    .map_err(|_| "failed to read networks")?
-                {
-                    let mut entry =
-                        database::NetworkEntry::from_key_value(key.as_ref(), value.as_ref())
-                            .map_err(|_| "invalid network in database")?;
-                    if entry.delete_customer(i) {
-                        network_map
-                            .overwrite(&entry)
-                            .map_err(|_| "failed to update some networks")?;
-                    }
-                }
+                network_map.remove_customer(i)?;
                 map.clear_inactive().ok();
 
                 let name = match String::from_utf8(key) {
@@ -551,10 +534,7 @@ pub fn get_customer_networks(db: &Store, customer_id: u32) -> Result<database::H
     let mut hosts = vec![];
     let mut networks = vec![];
     let mut ip_ranges = vec![];
-    if let Some((_key, value)) = map.get_by_id(customer_id)? {
-        let customer = bincode::DefaultOptions::new()
-            .deserialize::<database::Customer>(&value)
-            .map_err(|_| "invalid value in database")?;
+    if let Some(customer) = map.get_by_id::<review_database::Customer>(customer_id)? {
         customer.networks.iter().for_each(|net| {
             hosts.extend(net.network_group.hosts());
             networks.extend(net.network_group.networks());
