@@ -234,6 +234,14 @@ impl Indexable for Node {
         Cow::Borrowed(self.name.as_bytes())
     }
 
+    fn index(&self) -> u32 {
+        self.id
+    }
+
+    fn make_indexed_key(key: Cow<[u8]>, _index: u32) -> Cow<[u8]> {
+        key
+    }
+
     fn value(&self) -> Vec<u8> {
         bincode::DefaultOptions::new()
             .serialize(self)
@@ -344,6 +352,14 @@ impl NodeStatusTotalCount {
 impl Indexable for NodeStatus {
     fn key(&self) -> Cow<[u8]> {
         Cow::Borrowed(self.name.as_bytes())
+    }
+
+    fn index(&self) -> u32 {
+        self.id
+    }
+
+    fn make_indexed_key(key: Cow<[u8]>, _index: u32) -> Cow<[u8]> {
+        key
     }
 
     fn value(&self) -> Vec<u8> {
