@@ -120,7 +120,7 @@ impl DataSourceMutation {
         let store = crate::graphql::get_store(ctx).await?;
         let map = store.data_source_map();
 
-        let key = map.remove(i)?;
+        let key = map.remove::<review_database::DataSource>(i)?;
         match String::from_utf8(key) {
             Ok(key) => Ok(key),
             Err(e) => Ok(String::from_utf8_lossy(e.as_bytes()).into()),

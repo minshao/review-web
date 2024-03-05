@@ -146,7 +146,7 @@ impl TriagePolicyMutation {
         let mut removed = Vec::<String>::with_capacity(ids.len());
         for id in ids {
             let i = id.as_str().parse::<u32>().map_err(|_| "invalid ID")?;
-            let key = map.remove(i)?;
+            let key = map.remove::<review_database::TriagePolicy>(i)?;
 
             let name = match String::from_utf8(key) {
                 Ok(key) => key,

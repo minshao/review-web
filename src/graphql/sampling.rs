@@ -124,6 +124,14 @@ impl Indexable for SamplingPolicy {
         Cow::Borrowed(self.name.as_bytes())
     }
 
+    fn index(&self) -> u32 {
+        self.id
+    }
+
+    fn make_indexed_key(key: Cow<[u8]>, _index: u32) -> Cow<[u8]> {
+        key
+    }
+
     fn value(&self) -> Vec<u8> {
         bincode::DefaultOptions::new()
             .serialize(self)
@@ -368,7 +376,7 @@ impl SamplingPolicyMutation {
         let mut removed = Vec::<String>::with_capacity(ids.len());
         for id in ids {
             let i = id.as_str().parse::<u32>().map_err(|_| "invalid ID")?;
-            let key = map.remove(i)?;
+            let key = map.remove::<SamplingPolicy>(i)?;
 
             let name = match String::from_utf8(key) {
                 Ok(key) => key,
