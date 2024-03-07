@@ -242,13 +242,6 @@ async fn load(
     super::load_edges(&map, after, before, first, last, NetworkTotalCount)
 }
 
-pub(super) async fn remove_tag(ctx: &Context<'_>, tag_id: u32) -> Result<()> {
-    let store = crate::graphql::get_store(ctx).await?;
-    let map = store.network_map();
-
-    Ok(map.remove_tag(tag_id)?)
-}
-
 #[cfg(test)]
 mod tests {
     use crate::graphql::TestSchema;
