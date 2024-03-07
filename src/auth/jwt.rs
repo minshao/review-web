@@ -2,7 +2,7 @@ use super::{store::token_exists_in_store, AuthError};
 use crate::Store;
 use anyhow::anyhow;
 use async_graphql::Result;
-use chrono::{Duration, NaiveDateTime};
+use chrono::{NaiveDateTime, TimeDelta};
 use jsonwebtoken::{decode, encode, DecodingKey, EncodingKey, Header, Validation};
 use review_database as database;
 use serde::{Deserialize, Serialize};
@@ -34,11 +34,19 @@ impl Claims {
 /// # Errors
 ///
 /// Returns an error if the JWT locks are poisoned or if the JWT secret cannot be read.
+///
+/// # Panics
+///
+/// Panics if converting 3600 to `TimeDelta` fails, which is unlikely according to Chrono.
 pub fn create_token(username: String, role: String) -> Result<(String, NaiveDateTime), AuthError> {
     let expires_in = JWT_EXPIRES_IN
         .read()
         .map_err(|e| AuthError::ReadJwtSecret(e.to_string()))?;
-    let exp = chrono::Utc::now() + Duration::seconds(*expires_in);
+    let exp = chrono::Utc::now()
+        + TimeDelta::try_seconds(*expires_in).unwrap_or(
+            TimeDelta::try_seconds(3600)
+                .expect("3600 is a safe value for converting to TimeDelta."),
+        );
 
     let claims = Claims::new(username, role, exp.timestamp());
     let jwt_secret = JWT_SECRET

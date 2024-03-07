@@ -4,7 +4,7 @@ use async_graphql::{
     types::ID,
     Context, Object, Result,
 };
-use chrono::NaiveDateTime;
+use chrono::{DateTime, NaiveDateTime};
 use review_database::{BatchInfo, Database};
 use serde_json::Value as JsonValue;
 
@@ -161,7 +161,7 @@ async fn load_rounds_by_cluster(
         batches
             .into_iter()
             .take(limit)
-            .filter_map(|t| t.timestamp_nanos_opt())
+            .filter_map(|t| t.and_utc().timestamp_nanos_opt())
             .filter_map(|t| {
                 if let Ok(Some(b)) = map.get(model, t) {
                     Some(b)
@@ -204,8 +204,9 @@ async fn load_rounds_by_model(
 fn i64_to_naive_date_time(t: i64) -> NaiveDateTime {
     use num_traits::ToPrimitive;
     const A_BILLION: i64 = 1_000_000_000;
-    NaiveDateTime::from_timestamp_opt(t / A_BILLION, (t % A_BILLION).to_u32().unwrap_or_default())
+    DateTime::from_timestamp(t / A_BILLION, (t % A_BILLION).to_u32().unwrap_or_default())
         .unwrap_or_default()
+        .naive_utc()
 }
 
 struct RoundByCluster;

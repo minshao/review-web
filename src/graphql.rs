@@ -46,7 +46,7 @@ use async_graphql::{
     Context, Guard, MergedObject, MergedSubscription, ObjectType, OutputType, Result,
 };
 use async_trait::async_trait;
-use chrono::Duration;
+use chrono::TimeDelta;
 use data_encoding::BASE64;
 use ipnet::IpNet;
 use num_traits::ToPrimitive;
@@ -597,8 +597,11 @@ fn fill_vacant_time_slots(series: &[database::TimeCount]) -> Vec<database::TimeC
             (element.time - series[index - 1].time).num_seconds() / min_diff.num_seconds();
         if time_diff > 1 {
             for d in 1..time_diff {
+                let Some(min_diff) = TimeDelta::try_seconds(d * min_diff.num_seconds()) else {
+                    return Vec::new();
+                };
                 filled_series.push(database::TimeCount {
-                    time: series[index - 1].time + Duration::seconds(d * min_diff.num_seconds()),
+                    time: series[index - 1].time + min_diff,
                     count: 0,
                 });
             }

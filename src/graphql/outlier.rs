@@ -256,7 +256,7 @@ async fn load_outliers(
     filter: fn(RankedOutlier) -> Option<RankedOutlier>,
 ) -> Result<Connection<String, RankedOutlier, RankedOutlierTotalCount, EmptyFields>> {
     let model_id: i32 = model_id.as_str().parse()?;
-    let timestamp = time.map(|t| t.timestamp_nanos_opt().unwrap_or_default());
+    let timestamp = time.map(|t| t.and_utc().timestamp_nanos_opt().unwrap_or_default());
 
     let prefix = if let Some(timestamp) = timestamp {
         bincode::DefaultOptions::new().serialize(&(model_id, timestamp))?
@@ -731,7 +731,7 @@ async fn load_ranked_outliers_with_filter(
     filter: Option<SearchFilterInput>,
 ) -> Result<Connection<String, RankedOutlier, RankedOutlierTotalCount, EmptyFields>> {
     let model_id: i32 = model_id.as_str().parse()?;
-    let timestamp = time.map(|t| t.timestamp_nanos_opt().unwrap_or_default());
+    let timestamp = time.map(|t| t.and_utc().timestamp_nanos_opt().unwrap_or_default());
 
     let prefix = if let Some(timestamp) = timestamp {
         bincode::DefaultOptions::new().serialize(&(model_id, timestamp))?
