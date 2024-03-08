@@ -59,7 +59,9 @@ impl StatusMutation {
         let db = ctx.data::<Arc<RwLock<Store>>>()?.read().await;
         let mut map = db.status_map();
         let id: u32 = id.as_str().parse()?;
-        let old = map.get(id)?;
+        let Some(old) = map.get_by_id(id)? else {
+            return Err("no such status".into());
+        };
         map.update(id, &old.description, &description)?;
         Ok(ID(id.to_string()))
     }

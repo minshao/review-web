@@ -60,7 +60,9 @@ impl CategoryMutation {
         let db = ctx.data::<Arc<RwLock<Store>>>()?.read().await;
         let mut map = db.category_map();
         let id: u32 = id.as_str().parse()?;
-        let old = map.get(id)?;
+        let Some(old) = map.get_by_id(id)? else {
+            return Err("no such category".into());
+        };
         map.update(id, &old.name, &name)?;
         Ok(ID(id.to_string()))
     }
