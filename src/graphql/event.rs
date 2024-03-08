@@ -879,7 +879,7 @@ fn convert_endpoint_input(
                 .as_str()
                 .parse::<u32>()
                 .context(format!("invalid ID: {}", id.as_str()))?;
-            let Some(network) = network_map.get(i)? else {
+            let Some(network) = network_map.get_by_id(i)? else {
                 bail!("no such network")
             };
             networks.push(Endpoint {
