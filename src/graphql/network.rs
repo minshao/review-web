@@ -51,7 +51,7 @@ impl NetworkQuery {
 
         let store = crate::graphql::get_store(ctx).await?;
         let map = store.network_map();
-        let Some(inner) = map.get(i)? else {
+        let Some(inner) = map.get_by_id(i)? else {
             return Err("no such network".into());
         };
         Ok(Network { inner })

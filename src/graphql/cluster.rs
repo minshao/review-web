@@ -182,7 +182,10 @@ impl Cluster {
     async fn category(&self, ctx: &Context<'_>) -> Result<Category> {
         let db = ctx.data::<Arc<RwLock<Store>>>()?.read().await;
         let map = db.category_map();
-        Ok(map.get(u32::try_from(self.category)?)?.into())
+        let Some(res) = map.get_by_id(u32::try_from(self.category)?)? else {
+            return Err("no such category".into());
+        };
+        Ok(res.into())
     }
 
     async fn events(&self) -> Result<Vec<DateTime<Utc>>> {
@@ -201,17 +204,19 @@ impl Cluster {
     async fn qualifier(&self, ctx: &Context<'_>) -> Result<Qualifier> {
         let db = ctx.data::<Arc<RwLock<Store>>>()?.read().await;
         let map = db.qualifier_map();
-        Ok(map
-            .get(u32::try_from(self.qualifier).expect("invalid id"))?
-            .into())
+        let Some(res) = map.get_by_id(u32::try_from(self.qualifier).expect("invalid id"))? else {
+            return Err("no such qualifier".into());
+        };
+        Ok(res.into())
     }
 
     async fn status(&self, ctx: &Context<'_>) -> Result<Status> {
         let db = ctx.data::<Arc<RwLock<Store>>>()?.read().await;
         let map = db.status_map();
-        Ok(map
-            .get(u32::try_from(self.status).expect("invalid id"))?
-            .into())
+        let Some(res) = map.get_by_id(u32::try_from(self.status).expect("invalid id"))? else {
+            return Err("no such status".into());
+        };
+        Ok(res.into())
     }
 }
 
