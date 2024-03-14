@@ -9,7 +9,7 @@ use async_graphql::{
     Context, InputObject, Object, Result,
 };
 use chrono::{DateTime, Utc};
-use review_database::{self as database, Indexed};
+use review_database::{self as database};
 
 use std::{convert::TryInto, mem::size_of};
 
@@ -194,7 +194,7 @@ impl Network {
 
         for &id in &self.inner.customer_ids {
             #[allow(clippy::cast_sign_loss)] // u32 stored as i32 in database
-            let Some(customer) = map.get_by_id::<review_database::Customer>(id)?
+            let Some(customer) = map.get_by_id(id)?
             else {
                 continue;
             };

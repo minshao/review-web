@@ -7,13 +7,8 @@ use async_graphql::{
 };
 use bincode::Options;
 use chrono::{DateTime, Utc};
-use review_database::{
-    self as database, Indexed, IndexedMap, IndexedMapIterator, IndexedMapUpdate, Store,
-};
-use std::{
-    borrow::Cow,
-    convert::{TryFrom, TryInto},
-};
+use review_database::{self as database, Store};
+use std::convert::{TryFrom, TryInto};
 use tracing::error;
 
 #[derive(Default)]
@@ -73,24 +68,24 @@ impl CustomerMutation {
     ) -> Result<ID> {
         let store = crate::graphql::get_store(ctx).await?;
         let map = store.customer_map();
-        let mut customer_networks = Vec::<database::CustomerNetwork>::with_capacity(networks.len());
-        for n in networks {
-            customer_networks.push(n.try_into().map_err(|_| "invalid IP or network address")?);
-        }
-        customer_networks.sort_by(|a, b| a.name.cmp(&b.name));
-        let original_count = customer_networks.len();
-        customer_networks.dedup_by(|a, b| a.name == b.name);
-        if customer_networks.len() != original_count {
+        let mut networks: Vec<review_database::CustomerNetwork> = networks
+            .into_iter()
+            .map(TryFrom::try_from)
+            .collect::<Result<Vec<_>>>()?;
+        networks.sort_by(|a, b| a.name.cmp(&b.name));
+        let original_count = networks.len();
+        networks.dedup_by(|a, b| a.name == b.name);
+        if networks.len() != original_count {
             return Err("duplicate network name".into());
         }
         let value = database::Customer {
             id: u32::MAX,
             name,
             description,
-            networks: customer_networks,
+            networks,
             creation_time: Utc::now(),
         };
-        let id = map.insert(value)?;
+        let id = map.put(value)?;
         Ok(ID(id.to_string()))
     }
 
@@ -113,10 +108,8 @@ impl CustomerMutation {
             let mut removed = Vec::<String>::with_capacity(ids.len());
             for id in ids {
                 let i = id.as_str().parse::<u32>().map_err(|_| "invalid ID")?;
-                let key = map.deactivate(i)?;
-
+                let key = map.remove(i)?;
                 network_map.remove_customer(i)?;
-                map.clear_inactive().ok();
 
                 let name = match String::from_utf8(key) {
                     Ok(key) => key,
@@ -156,9 +149,11 @@ impl CustomerMutation {
         new: CustomerUpdateInput,
     ) -> Result<ID> {
         let i = id.as_str().parse::<u32>().map_err(|_| "invalid ID")?;
+        let old = old.try_into()?;
+        let new = new.try_into()?;
         let changed_networks = {
             let store = crate::graphql::get_store(ctx).await?;
-            let map = store.customer_map();
+            let mut map = store.customer_map();
             map.update(i, &old, &new)?;
 
             let mut hosts = vec![];
@@ -168,11 +163,10 @@ impl CustomerMutation {
                 let customer_id = get_customer_id_of_review_host(&store).ok().flatten();
                 if customer_id == Some(i) {
                     for nn in new_networks {
-                        if let Ok(v) = database::HostNetworkGroup::try_from(nn.network_group) {
-                            hosts.extend(v.hosts());
-                            networks.extend(v.networks());
-                            ip_ranges.extend(v.ip_ranges().to_vec());
-                        }
+                        let v = nn.network_group;
+                        hosts.extend(v.hosts());
+                        networks.extend(v.networks());
+                        ip_ranges.extend(v.ip_ranges().to_vec());
                     }
                     Some(database::HostNetworkGroup::new(hosts, networks, ip_ranges))
                 } else {
@@ -240,17 +234,8 @@ struct CustomerNetworkInput {
     pub network_group: HostNetworkGroupInput,
 }
 
-impl PartialEq<database::CustomerNetwork> for CustomerNetworkInput {
-    fn eq(&self, rhs: &database::CustomerNetwork) -> bool {
-        self.name == rhs.name
-            && self.description == rhs.description
-            && self.network_type == rhs.network_type.into()
-            && self.network_group == rhs.network_group
-    }
-}
-
 impl TryFrom<CustomerNetworkInput> for database::CustomerNetwork {
-    type Error = anyhow::Error;
+    type Error = async_graphql::Error;
 
     fn try_from(input: CustomerNetworkInput) -> Result<Self, Self::Error> {
         Ok(database::CustomerNetwork {
@@ -388,57 +373,22 @@ struct CustomerUpdateInput {
     networks: Option<Vec<CustomerNetworkInput>>,
 }
 
-impl IndexedMapUpdate for CustomerUpdateInput {
-    type Entry = database::Customer;
+impl TryFrom<CustomerUpdateInput> for review_database::CustomerUpdate {
+    type Error = async_graphql::Error;
 
-    fn key(&self) -> Option<Cow<[u8]>> {
-        self.name.as_deref().map(str::as_bytes).map(Cow::Borrowed)
-    }
-
-    fn apply(&self, mut value: Self::Entry) -> Result<Self::Entry, anyhow::Error> {
-        if let Some(name) = self.name.as_deref() {
-            value.name.clear();
-            value.name.push_str(name);
-        }
-        if let Some(description) = self.description.as_deref() {
-            value.description.clear();
-            value.description.push_str(description);
-        }
-        if let Some(networks) = self.networks.as_deref() {
-            value.networks.clear();
-            for n in networks {
-                value
-                    .networks
-                    .push((*n).clone().try_into().context("invalid network")?);
-            }
-        }
-        Ok(value)
-    }
-
-    fn verify(&self, value: &Self::Entry) -> bool {
-        if let Some(v) = self.name.as_deref() {
-            if v != value.name {
-                return false;
-            }
-        }
-        if let Some(v) = self.description.as_deref() {
-            if v != value.description {
-                return false;
-            }
-        }
-        if let Some(v) = self.networks.as_deref() {
-            if v.len() != value.networks.len() {
-                return false;
-            }
-            if !v
-                .iter()
-                .zip(value.networks.iter())
-                .all(|(lhs, rhs)| lhs == rhs)
-            {
-                return false;
-            }
-        }
-        true
+    fn try_from(input: CustomerUpdateInput) -> Result<Self, Self::Error> {
+        Ok(Self {
+            name: input.name,
+            description: input.description,
+            networks: input
+                .networks
+                .map(|n| {
+                    n.into_iter()
+                        .map(TryInto::try_into)
+                        .collect::<Result<Vec<_>>>()
+                })
+                .transpose()?,
+        })
     }
 }
 
@@ -514,14 +464,7 @@ async fn load(
 ) -> Result<Connection<String, Customer, CustomerTotalCount, EmptyFields>> {
     let store = crate::graphql::get_store(ctx).await?;
     let map = store.customer_map();
-    super::load::<
-        '_,
-        IndexedMap,
-        IndexedMapIterator,
-        Customer,
-        database::Customer,
-        CustomerTotalCount,
-    >(&map, after, before, first, last, CustomerTotalCount)
+    super::load_edges(&map, after, before, first, last, CustomerTotalCount)
 }
 
 /// Returns the customer network list.
@@ -534,7 +477,7 @@ pub fn get_customer_networks(db: &Store, customer_id: u32) -> Result<database::H
     let mut hosts = vec![];
     let mut networks = vec![];
     let mut ip_ranges = vec![];
-    if let Some(customer) = map.get_by_id::<review_database::Customer>(customer_id)? {
+    if let Some(customer) = map.get_by_id(customer_id)? {
         customer.networks.iter().for_each(|net| {
             hosts.extend(net.network_group.hosts());
             networks.extend(net.network_group.networks());
