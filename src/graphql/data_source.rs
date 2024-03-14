@@ -1,14 +1,10 @@
-use std::borrow::Cow;
-
 use super::{Role, RoleGuard};
 use async_graphql::{
     connection::{query, Connection, EmptyFields},
     types::ID,
     Context, Enum, InputObject, Object, Result,
 };
-use review_database::{
-    self as database, Indexed, IndexedMap, IndexedMapIterator, IndexedMapUpdate,
-};
+use review_database::{self as database};
 
 #[derive(Default)]
 pub(super) struct DataSourceQuery;
@@ -107,7 +103,7 @@ impl DataSourceMutation {
         let store = crate::graphql::get_store(ctx).await?;
         let map = store.data_source_map();
 
-        let id = map.insert(value)?;
+        let id = map.put(value)?;
         Ok(ID(id.to_string()))
     }
 
@@ -120,7 +116,7 @@ impl DataSourceMutation {
         let store = crate::graphql::get_store(ctx).await?;
         let map = store.data_source_map();
 
-        let key = map.remove::<review_database::DataSource>(i)?;
+        let key = map.remove(i)?;
         match String::from_utf8(key) {
             Ok(key) => Ok(key),
             Err(e) => Ok(String::from_utf8_lossy(e.as_bytes()).into()),
@@ -139,7 +135,9 @@ impl DataSourceMutation {
         let i = id.as_str().parse::<u32>().map_err(|_| "invalid ID")?;
 
         let store = crate::graphql::get_store(ctx).await?;
-        let map = store.data_source_map();
+        let mut map = store.data_source_map();
+        let old: review_database::DataSourceUpdate = old.into();
+        let new: review_database::DataSourceUpdate = new.into();
 
         map.update(i, &old, &new)?;
         Ok(id)
@@ -230,93 +228,17 @@ struct DataSourceUpdateInput {
     description: Option<String>,
 }
 
-impl IndexedMapUpdate for DataSourceUpdateInput {
-    type Entry = database::DataSource;
-
-    fn key(&self) -> Option<Cow<[u8]>> {
-        self.name.as_deref().map(str::as_bytes).map(Cow::Borrowed)
-    }
-
-    fn apply(&self, mut value: Self::Entry) -> Result<Self::Entry, anyhow::Error> {
-        if let Some(v) = self.name.as_deref() {
-            value.name.clear();
-            value.name.push_str(v);
+impl From<DataSourceUpdateInput> for review_database::DataSourceUpdate {
+    fn from(input: DataSourceUpdateInput) -> Self {
+        Self {
+            name: input.name,
+            server_name: input.server_name,
+            address: input.address,
+            data_type: input.data_type.map(Into::into),
+            source: input.source,
+            kind: input.kind,
+            description: input.description,
         }
-
-        if let Some(v) = self.server_name.as_deref() {
-            value.server_name.clear();
-            value.server_name.push_str(v);
-        }
-        if let Some(v) = self.address.as_deref() {
-            let addr = v.parse()?;
-            value.address = addr;
-        }
-
-        if let Some(v) = self.data_type {
-            value.data_type = v.into();
-        }
-
-        if let Some(v) = self.source.as_deref() {
-            value.source.clear();
-            value.source.push_str(v);
-        }
-        if let Some(v) = self.kind.as_deref() {
-            if value.data_type != database::DataType::TimeSeries {
-                if let Some(s) = value.kind.as_mut() {
-                    s.clear();
-                    s.push_str(v);
-                }
-            }
-        }
-
-        if let Some(v) = self.description.as_deref() {
-            value.description.clear();
-            value.description.push_str(v);
-        }
-
-        Ok(value)
-    }
-
-    fn verify(&self, value: &Self::Entry) -> bool {
-        if let Some(v) = self.name.as_deref() {
-            if value.name != v {
-                return false;
-            }
-        }
-        if let Some(v) = self.server_name.as_deref() {
-            if value.server_name != v {
-                return false;
-            }
-        }
-        if let Some(v) = self.address.as_deref() {
-            if let Ok(v) = v.parse() {
-                if value.address != v {
-                    return false;
-                }
-            } else {
-                return false;
-            }
-        }
-        if let Some(v) = self.data_type {
-            if value.data_type != v.into() {
-                return false;
-            }
-        }
-
-        if let Some(v) = self.source.as_deref() {
-            if value.source != v {
-                return false;
-            }
-        }
-        if value.kind.as_deref() != self.kind.as_deref() {
-            return false;
-        }
-        if let Some(v) = self.description.as_deref() {
-            if value.description != v {
-                return false;
-            }
-        }
-        true
     }
 }
 
@@ -343,14 +265,7 @@ async fn load(
     let store = crate::graphql::get_store(ctx).await?;
     let map = store.data_source_map();
 
-    super::load::<
-        '_,
-        IndexedMap,
-        IndexedMapIterator,
-        DataSource,
-        database::DataSource,
-        DataSourceTotalCount,
-    >(&map, after, before, first, last, DataSourceTotalCount)
+    super::load_edges(&map, after, before, first, last, DataSourceTotalCount)
 }
 
 async fn validate_policy(ctx: &Context<'_>, policy: &str, kind: database::DataType) -> Result<()> {
