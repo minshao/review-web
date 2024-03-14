@@ -41,7 +41,6 @@ use async_graphql::{
     connection::{query, Connection, Edge, EmptyFields},
     Context, InputObject, Object, Result, Subscription, Union, ID,
 };
-use bincode::Options;
 use chrono::{DateTime, Utc};
 use futures::channel::mpsc::{unbounded, UnboundedSender};
 use futures_util::stream::Stream;
@@ -50,9 +49,9 @@ use review_database::{
     self as database,
     event::RecordType,
     find_ip_country,
-    types::{Endpoint, EventCategory, FromKeyValue, HostNetworkGroup},
+    types::{Endpoint, EventCategory, HostNetworkGroup},
     Direction, EventFilter, EventIterator, EventKind, Indexed, IndexedMap, IndexedTable, Iterable,
-    IterableMap, Store,
+    Store,
 };
 use std::{
     cmp,
@@ -642,9 +641,12 @@ fn country_code(ctx: &Context<'_>, addr: IpAddr) -> String {
     }
 }
 
-fn find_ip_customer(map: &IndexedMap, addr: IpAddr) -> Result<Option<Customer>> {
-    for (key, value) in map.iter_forward()? {
-        let customer = database::Customer::from_key_value(key.as_ref(), value.as_ref())?;
+fn find_ip_customer(
+    map: &IndexedTable<review_database::Customer>,
+    addr: IpAddr,
+) -> Result<Option<Customer>> {
+    for entry in map.iter(Direction::Forward, None) {
+        let customer = entry?;
         if customer.networks.iter().any(|n| n.contains(addr)) {
             return Ok(Some(customer.into()));
         }
@@ -848,7 +850,7 @@ fn from_filter_input(store: &Store, input: &EventListFilterInput) -> anyhow::Res
 }
 
 fn convert_customer_input(
-    map: &IndexedMap,
+    map: &IndexedTable<database::Customer>,
     customer_ids: &[ID],
 ) -> anyhow::Result<Vec<database::Customer>> {
     let mut customers = Vec::with_capacity(customer_ids.len());
@@ -857,7 +859,7 @@ fn convert_customer_input(
             .as_str()
             .parse::<u32>()
             .context(format!("invalid ID: {}", id.as_str()))?;
-        let Some(c) = map.get_by_id::<review_database::Customer>(i)? else {
+        let Some(c) = map.get_by_id(i)? else {
             bail!("no such customer")
         };
         customers.push(c);
@@ -899,13 +901,12 @@ fn convert_endpoint_input(
     Ok(networks)
 }
 
-fn internal_customer_networks(map: &IndexedMap) -> anyhow::Result<Vec<HostNetworkGroup>> {
+fn internal_customer_networks(
+    map: &IndexedTable<database::Customer>,
+) -> anyhow::Result<Vec<HostNetworkGroup>> {
     let mut customer_networks = Vec::new();
-    let codec = bincode::DefaultOptions::new();
-    for (_, value) in map.iter_forward()? {
-        let customer: database::Customer = codec
-            .deserialize(value.as_ref())
-            .context("invalid customer in database")?;
+    for entry in map.iter(Direction::Forward, None) {
+        let customer: database::Customer = entry?;
         for network in customer.networks {
             if network.network_type == database::NetworkType::Intranet
                 || network.network_type == database::NetworkType::Gateway
