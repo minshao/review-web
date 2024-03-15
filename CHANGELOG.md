@@ -5,6 +5,18 @@ file is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and
 this project adheres to [Semantic
 Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+
+- GraphQL queries `accountList`, `allowNetworkList`, `blockNetworkList`, `categories`,
+  `networkList`, `qualifiers`, `samplingPolicyList`, `loadRoundsByModel`, `statuses`,
+  `templateList`, `torExitNodeList`, `triageResponseList` now explicitly reject
+  user input with combinations of (before, after), (first, before), and (last,
+  after) parameters, following the GraphQL pagination documentation guidelines.
+  This enhancement ensures better consistency and adherence to best practices in
+  handling pagination requests.
+
 ## [0.19.0] - 2024-03-18
 
 ### Changed

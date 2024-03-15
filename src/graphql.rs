@@ -537,7 +537,7 @@ fn load_edges<I, R, N, A, NodesField>(
     after: Option<String>,
     before: Option<String>,
     mut first: Option<usize>,
-    last: Option<usize>,
+    mut last: Option<usize>,
     additional_fields: A,
 ) -> Result<Connection<String, N, A, EmptyFields, NodesField>>
 where
@@ -547,11 +547,23 @@ where
     A: ObjectType,
     NodesField: ConnectionNameType,
 {
-    if first.is_some() && last.is_some() {
-        return Err("cannot provide both `first` and `last`".into());
-    }
-    if first.is_none() && last.is_none() {
-        first = Some(DEFAULT_CONNECTION_SIZE);
+    match (
+        first.is_some(),
+        last.is_some(),
+        before.is_some(),
+        after.is_some(),
+    ) {
+        (true, true, _, _) => return Err("cannot provide both `first` and `last`".into()),
+        (_, _, true, true) => return Err("cannot provide both `before` and `after`".into()),
+        (true, _, true, _) => return Err("cannot provide both `first` and `before`".into()),
+        (_, true, _, true) => return Err("cannot provide both `last` and `after`".into()),
+        (false, false, false, _) => {
+            first = Some(DEFAULT_CONNECTION_SIZE);
+        }
+        (false, false, true, false) => {
+            last = Some(DEFAULT_CONNECTION_SIZE);
+        }
+        _ => {}
     }
 
     let after = if let Some(after) = after {
