@@ -939,7 +939,7 @@ fn convert_sensors(map: &IndexedMap, sensors: &[ID]) -> anyhow::Result<Vec<Strin
 }
 
 fn convert_triage_input(
-    map: &IndexedMap,
+    map: &IndexedTable<database::TriagePolicy>,
     triage_policy_ids: &[ID],
 ) -> anyhow::Result<Vec<database::TriagePolicy>> {
     let mut triage_policies = Vec::with_capacity(triage_policy_ids.len());
