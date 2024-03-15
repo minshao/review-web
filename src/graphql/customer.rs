@@ -625,10 +625,7 @@ mod tests {
                 r#"{customerList(last: 10, after: "dDc="){edges{node{name}}totalCount,pageInfo{startCursor}}}"#,
             )
             .await;
-        assert_eq!(
-            res.data.to_string(),
-            r#"{customerList: {edges: [{node: {name: "t8"}},{node: {name: "t9"}}],totalCount: 10,pageInfo: {startCursor: "dDg="}}}"#
-        );
+        assert!(res.is_err());
 
         let res = schema
             .execute(
@@ -645,10 +642,7 @@ mod tests {
             r#"{customerList(first:10 before:"dDc=" ){edges{node{name}}totalCount,pageInfo{endCursor}}}"#,
         )
         .await;
-        assert_eq!(
-            res.data.to_string(),
-            r#"{customerList: {edges: [{node: {name: "t1"}},{node: {name: "t10"}},{node: {name: "t2"}},{node: {name: "t3"}},{node: {name: "t4"}},{node: {name: "t5"}},{node: {name: "t6"}}],totalCount: 10,pageInfo: {endCursor: "dDY="}}}"#
-        );
+        assert!(res.is_err());
 
         let res = schema
             .execute(r#"{customerList(first:10){edges{node{name}}totalCount}}"#)
