@@ -16,6 +16,20 @@ Versioning](https://semver.org/spec/v2.0.0.html).
   is less than one second.
 - `init_expiration_time` and `update_jwt_expires_in` take `u32` instead of `i64`
   for the expiration time argument.
+- `Node` struct now has `settings` and `settings_draft` of type `NodeSettings`,
+  and `name` and `name_draft`. Upon initial insertion of `Node`, `name` must be
+  provided, as it is used as the key of `Node` in the database. `name_draft` and
+  `settings_draft` are introduced to support 2-step node-setting process, which
+  is save & apply. `name_draft` and `settings_draft` fields mean that the data
+  are only saved to the database. Once those are applied, the draft values are
+  moved to `name`, and `settings`.
+  - Renamed `updateNode` GraphQL API to `updateNodeDraft`, and modified
+    parameter types. `old` to `NodeInput`, and `new` to `NodeDraftInput`.
+  - `graphql::event::convert_sensors` uses `Node`'s `settings` value, to
+    retrieve the hostnames of the sensors. This function is called by GraphQL
+    APIs of `EventQuery` and `EventGroupQuery`.
+  - `nodeStatusList` GraphQL API uses `hostname` from `Node`'s `settings` field.
+  - `graphql::node::crud::get_node_settings` uses `Node`'s `settings` value.
 
 ### Removed
 
@@ -39,6 +53,11 @@ Versioning](https://semver.org/spec/v2.0.0.html).
 - `AgentManager::get_config` and `AgentManager::set_config` methods to get and
   set the configuration of an agent.
 - Add `nodeShutdown` GraphQL API.
+- Introduced `applyNode` GraphQL API, that applies draft values to modules and
+  updates values in database. This API handles partial success of setting
+  application settings, which may happen when a node carries multiple modules.
+  The API returns the list of succeeded modules' names in
+  `ApplyResult::success_modules`.
 
 ### Fixed
 

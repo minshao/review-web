@@ -115,53 +115,58 @@ async fn load(
                 total_disk_space,
                 used_disk_space,
                 ping,
-            ) = if let (Some(modules), Some(usage), Some(ping)) = (
-                apps.get(&ev.hostname),
-                usages.get(&ev.hostname),
-                ping.get(&ev.hostname),
-            ) {
-                let module_names = modules
-                    .iter()
-                    .map(|(_, m)| m.clone())
-                    .collect::<HashSet<String>>();
-                let (review, piglet, giganto, reconverge, hog) = (
-                    module_names.contains(&"review".to_string()),
-                    module_names.contains(&"piglet".to_string()),
-                    module_names.contains(&"giganto".to_string()),
-                    module_names.contains(&"reconverge".to_string()),
-                    module_names.contains(&"hog".to_string()),
-                );
-                (
-                    Some(review),
-                    Some(piglet),
-                    Some(giganto),
-                    Some(reconverge),
-                    Some(hog),
-                    Some(usage.cpu_usage),
-                    Some(usage.total_memory),
-                    Some(usage.used_memory),
-                    Some(usage.total_disk_space),
-                    Some(usage.used_disk_space),
-                    Some(*ping),
-                )
-            } else if !review_hostname.is_empty() && review_hostname == ev.hostname {
-                (
-                    Some(true),
-                    None,
-                    None,
-                    None,
-                    None,
-                    Some(review_usage.cpu_usage),
-                    Some(review_usage.total_memory),
-                    Some(review_usage.used_memory),
-                    Some(review_usage.total_disk_space),
-                    Some(review_usage.used_disk_space),
-                    None,
-                )
-            } else {
-                (
+            ) = match ev.settings.as_ref().map(|settings| &settings.hostname) {
+                Some(hostname) => {
+                    if let (Some(modules), Some(usage), Some(ping)) =
+                        (apps.get(hostname), usages.get(hostname), ping.get(hostname))
+                    {
+                        let module_names = modules
+                            .iter()
+                            .map(|(_, m)| m.clone())
+                            .collect::<HashSet<String>>();
+                        let (review, piglet, giganto, reconverge, hog) = (
+                            module_names.contains(&"review".to_string()),
+                            module_names.contains(&"piglet".to_string()),
+                            module_names.contains(&"giganto".to_string()),
+                            module_names.contains(&"reconverge".to_string()),
+                            module_names.contains(&"hog".to_string()),
+                        );
+                        (
+                            Some(review),
+                            Some(piglet),
+                            Some(giganto),
+                            Some(reconverge),
+                            Some(hog),
+                            Some(usage.cpu_usage),
+                            Some(usage.total_memory),
+                            Some(usage.used_memory),
+                            Some(usage.total_disk_space),
+                            Some(usage.used_disk_space),
+                            Some(*ping),
+                        )
+                    } else if !review_hostname.is_empty() && &review_hostname == hostname {
+                        (
+                            Some(true),
+                            None,
+                            None,
+                            None,
+                            None,
+                            Some(review_usage.cpu_usage),
+                            Some(review_usage.total_memory),
+                            Some(review_usage.used_memory),
+                            Some(review_usage.total_disk_space),
+                            Some(review_usage.used_disk_space),
+                            None,
+                        )
+                    } else {
+                        (
+                            None, None, None, None, None, None, None, None, None, None, None,
+                        )
+                    }
+                }
+                None => (
                     None, None, None, None, None, None, None, None, None, None, None,
-                )
+                ),
             };
             Edge::new(
                 k,
