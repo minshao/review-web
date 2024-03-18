@@ -1,19 +1,15 @@
 use super::{BoxedAgentManager, Role, RoleGuard};
-use anyhow::Context as AnyhowContext;
 use async_graphql::{
     connection::{query, Connection, EmptyFields},
     types::ID,
-    ComplexObject, Context, Enum, InputObject, Object, Result, SimpleObject,
+    Context, Enum, InputObject, Object, Result,
 };
 use bincode::Options;
 use chrono::{DateTime, Utc};
 use oinq::RequestCode;
-use review_database::{
-    types::FromKeyValue, Indexable, Indexed, IndexedMap, IndexedMapIterator, IndexedMapUpdate,
-    IterableMap,
-};
+use review_database::{Direction, Iterable};
 use serde::{Deserialize, Serialize};
-use std::{borrow::Cow, net::IpAddr};
+use std::net::IpAddr;
 
 #[derive(Default)]
 pub(super) struct SamplingPolicyQuery;
@@ -36,6 +32,28 @@ impl Default for Interval {
         Self::FifteenMinutes
     }
 }
+impl From<review_database::SamplingInterval> for Interval {
+    fn from(input: review_database::SamplingInterval) -> Self {
+        match input {
+            review_database::SamplingInterval::FiveMinutes => Self::FiveMinutes,
+            review_database::SamplingInterval::TenMinutes => Self::TenMinutes,
+            review_database::SamplingInterval::FifteenMinutes => Self::FifteenMinutes,
+            review_database::SamplingInterval::ThirtyMinutes => Self::ThirtyMinutes,
+            review_database::SamplingInterval::OneHour => Self::OneHour,
+        }
+    }
+}
+impl From<Interval> for review_database::SamplingInterval {
+    fn from(input: Interval) -> Self {
+        match input {
+            Interval::FiveMinutes => Self::FiveMinutes,
+            Interval::TenMinutes => Self::TenMinutes,
+            Interval::FifteenMinutes => Self::FifteenMinutes,
+            Interval::ThirtyMinutes => Self::ThirtyMinutes,
+            Interval::OneHour => Self::OneHour,
+        }
+    }
+}
 
 #[derive(Clone, Copy, Eq, PartialEq, Enum, Deserialize, Serialize)]
 #[repr(u32)]
@@ -48,6 +66,26 @@ pub enum Period {
 impl Default for Period {
     fn default() -> Self {
         Self::OneDay
+    }
+}
+
+impl From<review_database::SamplingPeriod> for Period {
+    fn from(input: review_database::SamplingPeriod) -> Self {
+        match input {
+            review_database::SamplingPeriod::SixHours => Self::SixHours,
+            review_database::SamplingPeriod::TwelveHours => Self::TwelveHours,
+            review_database::SamplingPeriod::OneDay => Self::OneDay,
+        }
+    }
+}
+
+impl From<Period> for review_database::SamplingPeriod {
+    fn from(input: Period) -> Self {
+        match input {
+            Period::SixHours => Self::SixHours,
+            Period::TwelveHours => Self::TwelveHours,
+            Period::OneDay => Self::OneDay,
+        }
     }
 }
 
@@ -65,45 +103,81 @@ impl Default for Kind {
         Self::Conn
     }
 }
-
-#[derive(Clone, Deserialize, Serialize, SimpleObject)]
-#[graphql(complex)]
-pub(super) struct SamplingPolicy {
-    #[graphql(skip)]
-    id: u32,
-    name: String,
-    kind: Kind,
-    interval: Interval,
-    period: Period,
-    offset: i32,
-    #[graphql(skip)]
-    src_ip: Option<IpAddr>,
-    #[graphql(skip)]
-    dst_ip: Option<IpAddr>,
-    node: Option<String>,
-    column: Option<u32>,
-    immutable: bool,
-    creation_time: DateTime<Utc>,
+impl From<review_database::SamplingKind> for Kind {
+    fn from(input: review_database::SamplingKind) -> Self {
+        match input {
+            review_database::SamplingKind::Conn => Self::Conn,
+            review_database::SamplingKind::Dns => Self::Dns,
+            review_database::SamplingKind::Http => Self::Http,
+            review_database::SamplingKind::Rdp => Self::Rdp,
+        }
+    }
 }
 
-#[ComplexObject]
+impl From<Kind> for review_database::SamplingKind {
+    fn from(input: Kind) -> Self {
+        match input {
+            Kind::Conn => Self::Conn,
+            Kind::Dns => Self::Dns,
+            Kind::Http => Self::Http,
+            Kind::Rdp => Self::Rdp,
+        }
+    }
+}
+pub(super) struct SamplingPolicy {
+    inner: review_database::SamplingPolicy,
+}
+
+#[Object]
 impl SamplingPolicy {
     async fn id(&self) -> ID {
-        ID(self.id.to_string())
+        ID(self.inner.id.to_string())
+    }
+
+    async fn name(&self) -> &str {
+        &self.inner.name
+    }
+
+    async fn kind(&self) -> Kind {
+        self.inner.kind.into()
+    }
+
+    async fn interval(&self) -> Interval {
+        self.inner.interval.into()
+    }
+
+    async fn period(&self) -> Period {
+        self.inner.period.into()
+    }
+
+    async fn offset(&self) -> i32 {
+        self.inner.offset
     }
 
     async fn src_ip(&self) -> Option<String> {
-        self.src_ip.as_ref().map(ToString::to_string)
+        self.inner.src_ip.as_ref().map(ToString::to_string)
     }
 
     async fn dst_ip(&self) -> Option<String> {
-        self.dst_ip.as_ref().map(ToString::to_string)
+        self.inner.dst_ip.as_ref().map(ToString::to_string)
+    }
+
+    async fn column(&self) -> Option<u32> {
+        self.inner.column
+    }
+
+    async fn immutable(&self) -> bool {
+        self.inner.immutable
+    }
+
+    async fn creation_time(&self) -> DateTime<Utc> {
+        self.inner.creation_time
     }
 }
 
-impl FromKeyValue for SamplingPolicy {
-    fn from_key_value(_key: &[u8], value: &[u8]) -> anyhow::Result<Self> {
-        Ok(bincode::DefaultOptions::new().deserialize(value)?)
+impl From<review_database::SamplingPolicy> for SamplingPolicy {
+    fn from(inner: review_database::SamplingPolicy) -> Self {
+        Self { inner }
     }
 }
 
@@ -119,30 +193,6 @@ impl SamplingPolicyTotalCount {
     }
 }
 
-impl Indexable for SamplingPolicy {
-    fn key(&self) -> Cow<[u8]> {
-        Cow::Borrowed(self.name.as_bytes())
-    }
-
-    fn index(&self) -> u32 {
-        self.id
-    }
-
-    fn make_indexed_key(key: Cow<[u8]>, _index: u32) -> Cow<[u8]> {
-        key
-    }
-
-    fn value(&self) -> Vec<u8> {
-        bincode::DefaultOptions::new()
-            .serialize(self)
-            .expect("serializable")
-    }
-
-    fn set_index(&mut self, index: u32) {
-        self.id = index;
-    }
-}
-
 #[derive(Clone, InputObject)]
 pub(super) struct SamplingPolicyInput {
     pub name: String,
@@ -155,6 +205,25 @@ pub(super) struct SamplingPolicyInput {
     pub node: Option<String>, // hostname
     pub column: Option<u32>,
     pub immutable: bool,
+}
+
+impl TryFrom<SamplingPolicyInput> for review_database::SamplingPolicyUpdate {
+    type Error = async_graphql::Error;
+
+    fn try_from(input: SamplingPolicyInput) -> Result<Self, Self::Error> {
+        Ok(Self {
+            name: input.name,
+            kind: input.kind.into(),
+            interval: input.interval.into(),
+            period: input.period.into(),
+            offset: input.offset,
+            src_ip: input.src_ip.map(|ip| ip.parse::<IpAddr>()).transpose()?,
+            dst_ip: input.dst_ip.map(|ip| ip.parse::<IpAddr>()).transpose()?,
+            node: input.node,
+            column: input.column,
+            immutable: input.immutable,
+        })
+    }
 }
 
 #[Object]
@@ -191,7 +260,7 @@ impl SamplingPolicyQuery {
         let Some(policy) = map.get_by_id(i)? else {
             return Err("no such sampling policy".into());
         };
-        Ok(policy)
+        Ok(policy.into())
     }
 }
 
@@ -204,14 +273,7 @@ async fn load(
 ) -> Result<Connection<String, SamplingPolicy, SamplingPolicyTotalCount, EmptyFields>> {
     let store = crate::graphql::get_store(ctx).await?;
     let map = store.sampling_policy_map();
-    super::load::<
-        '_,
-        IndexedMap,
-        IndexedMapIterator,
-        SamplingPolicy,
-        SamplingPolicy,
-        SamplingPolicyTotalCount,
-    >(&map, after, before, first, last, SamplingPolicyTotalCount)
+    super::load_edges(&map, after, before, first, last, SamplingPolicyTotalCount)
 }
 
 #[derive(Serialize)]
@@ -227,48 +289,32 @@ pub struct Policy {
     pub column: Option<u32>,
 }
 
-impl TryFrom<SamplingPolicy> for SamplingPolicyInput {
-    type Error = async_graphql::Error;
-
-    fn try_from(input: SamplingPolicy) -> Result<Self, Self::Error> {
-        Ok(SamplingPolicyInput {
-            name: input.name,
-            kind: input.kind,
-            interval: input.interval,
-            period: input.period,
+impl From<review_database::SamplingPolicy> for Policy {
+    fn from(input: review_database::SamplingPolicy) -> Self {
+        Self {
+            id: input.id,
+            kind: input.kind.into(),
+            interval: input.interval.into(),
+            period: input.period.into(),
             offset: input.offset,
-            src_ip: input.src_ip.as_ref().map(ToString::to_string),
-            dst_ip: input.dst_ip.as_ref().map(ToString::to_string),
+            src_ip: input.src_ip,
+            dst_ip: input.dst_ip,
             node: input.node,
             column: input.column,
-            immutable: input.immutable,
-        })
+        }
     }
 }
 
 async fn load_immutable(ctx: &Context<'_>) -> Result<Vec<Policy>> {
     let store = crate::graphql::get_store(ctx).await?;
     let map = store.sampling_policy_map();
-    let codec = bincode::DefaultOptions::new();
 
     let mut rtn: Vec<Policy> = Vec::new();
 
-    for (_, v) in map.iter_forward()? {
-        let pol = codec
-            .deserialize::<SamplingPolicy>(&v)
-            .context("failed to deserialize data from sampling_policy_map")?;
+    for entry in map.iter(Direction::Forward, None) {
+        let pol = entry?;
         if pol.immutable {
-            rtn.push(Policy {
-                id: pol.id,
-                kind: pol.kind,
-                interval: pol.interval,
-                period: pol.period,
-                offset: pol.offset,
-                src_ip: pol.src_ip,
-                dst_ip: pol.dst_ip,
-                node: pol.node,
-                column: pol.column,
-            });
+            rtn.push(pol.into());
         }
     }
 
@@ -295,45 +341,26 @@ impl SamplingPolicyMutation {
         column: Option<u32>,
         immutable: bool,
     ) -> Result<ID> {
-        let src_ip = if let Some(ip) = src_ip {
-            Some(
-                ip.as_str()
-                    .parse::<IpAddr>()
-                    .map_err(|_| "invalid IP address: source")?,
-            )
-        } else {
-            None
-        };
-        let dst_ip = if let Some(ip) = dst_ip {
-            Some(
-                ip.as_str()
-                    .parse::<IpAddr>()
-                    .map_err(|_| "invalid IP address: destination")?,
-            )
-        } else {
-            None
-        };
-        let pol = SamplingPolicy {
+        let pol = review_database::SamplingPolicy {
             id: u32::MAX,
             name,
-            kind,
-            interval,
-            period,
+            kind: kind.into(),
+            interval: interval.into(),
+            period: period.into(),
             offset,
-            src_ip,
-            dst_ip,
+            src_ip: src_ip.map(|ip| ip.parse::<IpAddr>()).transpose()?,
+            dst_ip: dst_ip.map(|ip| ip.parse::<IpAddr>()).transpose()?,
             node,
             column,
             immutable,
-            creation_time: Utc::now(),
+            creation_time: chrono::Utc::now(),
         };
 
-        let id;
-        {
+        let id = {
             let store = crate::graphql::get_store(ctx).await?;
             let map = store.sampling_policy_map();
-            id = map.insert(pol.clone())?;
-        }
+            map.put(pol.clone())?
+        };
 
         if immutable {
             // TODO: Refactor this code to use
@@ -346,12 +373,11 @@ impl SamplingPolicyMutation {
             let agents = ctx.data::<BoxedAgentManager>()?;
             if let Err(e) = agents.broadcast_to_crusher(&msg).await {
                 // Change policy to mutable so that user can retry
-                let old = SamplingPolicyInput::try_from(pol)?;
-                #[allow(clippy::redundant_clone)]
+                let old: review_database::SamplingPolicyUpdate = pol.into();
                 let mut new = old.clone();
                 new.immutable = false;
                 let store = crate::graphql::get_store(ctx).await?;
-                let map = store.sampling_policy_map();
+                let mut map = store.sampling_policy_map();
                 map.update(id, &old, &new)?;
                 return Err(e.into());
             }
@@ -376,7 +402,7 @@ impl SamplingPolicyMutation {
         let mut removed = Vec::<String>::with_capacity(ids.len());
         for id in ids {
             let i = id.as_str().parse::<u32>().map_err(|_| "invalid ID")?;
-            let key = map.remove::<SamplingPolicy>(i)?;
+            let key = map.remove(i)?;
 
             let name = match String::from_utf8(key) {
                 Ok(key) => key,
@@ -402,90 +428,14 @@ impl SamplingPolicyMutation {
         if old.immutable {
             return Err("immutable set by user".into());
         }
+        let old = old.try_into()?;
+        let new = new.try_into()?;
 
         let store = crate::graphql::get_store(ctx).await?;
-        let map = store.sampling_policy_map();
+        let mut map = store.sampling_policy_map();
         map.update(i, &old, &new)?;
 
         Ok(id)
-    }
-}
-
-impl IndexedMapUpdate for SamplingPolicyInput {
-    type Entry = SamplingPolicy;
-
-    fn key(&self) -> Option<Cow<[u8]>> {
-        Some(Cow::Borrowed(self.name.as_bytes()))
-    }
-
-    fn apply(&self, mut value: Self::Entry) -> Result<Self::Entry, anyhow::Error> {
-        value.name.clear();
-        value.name.push_str(&self.name);
-        value.kind = self.kind;
-        value.interval = self.interval;
-        value.period = self.period;
-        value.offset = self.offset;
-        value.src_ip = if let Some(ip) = self.src_ip.as_deref() {
-            Some(ip.parse::<IpAddr>().context("invalid IP address: source")?)
-        } else {
-            None
-        };
-        value.dst_ip = if let Some(ip) = self.dst_ip.as_deref() {
-            Some(ip.parse::<IpAddr>().context("invalid IP address: source")?)
-        } else {
-            None
-        };
-        value.node = self.node.clone();
-        value.column = self.column;
-        value.immutable = self.immutable;
-
-        Ok(value)
-    }
-
-    fn verify(&self, value: &Self::Entry) -> bool {
-        if self.name != value.name {
-            return false;
-        }
-        if self.kind != value.kind {
-            return false;
-        }
-        if self.interval != value.interval {
-            return false;
-        }
-        if self.period != value.period {
-            return false;
-        }
-        if self.offset != value.offset {
-            return false;
-        }
-        if let (Some(ip_self), Some(ip_value)) = (self.src_ip.as_deref(), value.src_ip) {
-            if ip_self
-                .parse::<IpAddr>()
-                .map_or(true, |ip_self| ip_self != ip_value)
-            {
-                return false;
-            }
-        } else if self.src_ip.is_some() || value.src_ip.is_some() {
-            return false;
-        }
-        if let (Some(ip_self), Some(ip_value)) = (self.dst_ip.as_deref(), value.dst_ip) {
-            if ip_self
-                .parse::<IpAddr>()
-                .map_or(true, |ip_self| ip_self != ip_value)
-            {
-                return false;
-            }
-        } else if self.dst_ip.is_some() || value.dst_ip.is_some() {
-            return false;
-        }
-        if self.node != value.node {
-            return false;
-        }
-        if self.column != value.column {
-            return false;
-        }
-
-        true
     }
 }
 
