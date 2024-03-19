@@ -436,12 +436,11 @@ impl ModelDigest {
     }
 
     async fn data_source(&self, ctx: &Context<'_>) -> Result<DataSource> {
-        use review_database::Indexed;
         let store = crate::graphql::get_store(ctx).await?;
         let map = store.data_source_map();
         #[allow(clippy::cast_sign_loss)] // u32 stored as i32 in the database
         match map
-            .get_by_id::<review_database::DataSource>(self.inner.data_source_id as u32)
+            .get_by_id(self.inner.data_source_id as u32)
             .map_err(|_| "failed to read data source")?
         {
             Some(ds) => Ok(ds.into()),
