@@ -312,20 +312,65 @@ const DEFAULT_CUTOFF_RATE: f64 = 0.1;
 const DEFAULT_TRENDI_ORDER: i32 = 4;
 
 #[allow(clippy::type_complexity)] // since this is called within `load` only
-fn load_nodes<'m, M, I, N, NI>(
-    map: &'m M,
+fn load_nodes<I, R, N>(
+    table: &I,
     after: Option<String>,
     before: Option<String>,
-    first: Option<usize>,
-    last: Option<usize>,
+    mut first: Option<usize>,
+    mut last: Option<usize>,
 ) -> Result<(Vec<(String, N)>, bool, bool)>
 where
-    M: IterableMap<'m, I>,
-    I: Iterator<Item = (Box<[u8]>, Box<[u8]>)> + 'm,
-    N: From<NI> + OutputType,
-    NI: FromKeyValue,
+    I: database::Iterable<R>,
+    R: database::types::FromKeyValue + database::UniqueKey,
+    N: From<R> + OutputType,
 {
-    load_nodes_with_filter(map, |n| Some(n), after, before, first, last)
+    match (
+        first.is_some(),
+        last.is_some(),
+        before.is_some(),
+        after.is_some(),
+    ) {
+        (true, true, _, _) => return Err("cannot provide both `first` and `last`".into()),
+        (_, _, true, true) => return Err("cannot provide both `before` and `after`".into()),
+        (true, _, true, _) => return Err("cannot provide both `first` and `before`".into()),
+        (_, true, _, true) => return Err("cannot provide both `last` and `after`".into()),
+        (false, false, false, _) => {
+            first = Some(DEFAULT_CONNECTION_SIZE);
+        }
+        (false, false, true, false) => {
+            last = Some(DEFAULT_CONNECTION_SIZE);
+        }
+        _ => {}
+    }
+
+    let after = if let Some(after) = after {
+        Some(decode_cursor(&after).ok_or("invalid cursor `after`")?)
+    } else {
+        None
+    };
+    let before = if let Some(before) = before {
+        Some(decode_cursor(&before).ok_or("invalid cursor `before`")?)
+    } else {
+        None
+    };
+
+    let (nodes, has_previous, has_next) = if let Some(first) = first {
+        let (nodes, has_more) = collect_edges(table, Direction::Forward, after, before, first);
+        (nodes, false, has_more)
+    } else {
+        let Some(last) = last else { unreachable!() };
+        let (mut nodes, has_more) = collect_edges(table, Direction::Reverse, before, after, last);
+        nodes.reverse();
+        (nodes, has_more, false)
+    };
+    let nodes = nodes
+        .into_iter()
+        .map(|res| {
+            res.map(|n| (encode_cursor(&n.unique_key()), n.into()))
+                .map_err(|e| format!("{e}").into())
+        })
+        .collect::<Result<Vec<_>>>()?;
+    Ok((nodes, has_previous, has_next))
 }
 
 #[allow(clippy::type_complexity)] // since this is called within `load` only

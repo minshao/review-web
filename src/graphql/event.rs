@@ -50,8 +50,7 @@ use review_database::{
     event::RecordType,
     find_ip_country,
     types::{Endpoint, EventCategory, HostNetworkGroup},
-    Direction, EventFilter, EventIterator, EventKind, Indexed, IndexedMap, IndexedTable, Iterable,
-    Store,
+    Direction, EventFilter, EventIterator, EventKind, IndexedTable, Iterable, Store,
 };
 use std::{
     cmp,
@@ -918,18 +917,21 @@ fn internal_customer_networks(
     Ok(customer_networks)
 }
 
-fn convert_sensors(map: &IndexedMap, sensors: &[ID]) -> anyhow::Result<Vec<String>> {
+fn convert_sensors(
+    map: &IndexedTable<database::Node>,
+    sensors: &[ID],
+) -> anyhow::Result<Vec<String>> {
     let mut converted_sensors: Vec<String> = Vec::with_capacity(sensors.len());
     for id in sensors {
         let i = id
             .as_str()
             .parse::<u32>()
             .context(format!("invalid ID: {}", id.as_str()))?;
-        let Some(node): Option<super::node::Node> = map.get_by_id(i)? else {
+        let Some(node) = map.get_by_id(i)? else {
             bail!("no such sensor")
         };
 
-        if let Some(node_settings) = node.settings {
+        if let Some(node_settings) = node.setting {
             if !node_settings.hostname.is_empty() {
                 converted_sensors.push(node_settings.hostname.clone());
             }

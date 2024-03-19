@@ -10,7 +10,7 @@ use chrono::{DateTime, TimeZone, Utc};
 pub use crud::{get_customer_id_of_review_host, get_node_settings};
 use input::NodeInput;
 use ipnet::Ipv4Net;
-use review_database::{types::FromKeyValue, Indexable, Indexed, IndexedMapUpdate};
+use review_database::Indexable;
 use roxy::Process as RoxyProcess;
 use serde::{Deserialize, Serialize};
 use std::{
@@ -18,9 +18,6 @@ use std::{
     collections::HashMap,
     net::{IpAddr, SocketAddr},
 };
-use tracing::error;
-
-use self::input::{NodeDraftInput, NodeSettingsInput};
 
 pub type PortNumber = u16;
 
@@ -168,6 +165,56 @@ pub struct NodeSettings {
     sensors: bool,
     sensor_list: HashMap<String, bool>,
 }
+
+impl From<review_database::NodeSetting> for NodeSettings {
+    fn from(input: review_database::NodeSetting) -> Self {
+        Self {
+            customer_id: input.customer_id,
+            description: input.description.clone(),
+            hostname: input.hostname.clone(),
+            review: input.review,
+            review_port: input.review_port,
+            review_web_port: input.review_web_port,
+            piglet: input.piglet,
+            piglet_giganto_ip: input.piglet_giganto_ip,
+            piglet_giganto_port: input.piglet_giganto_port,
+            piglet_review_ip: input.piglet_review_ip,
+            piglet_review_port: input.piglet_review_port,
+            save_packets: input.save_packets,
+            http: input.http,
+            office: input.office,
+            exe: input.exe,
+            pdf: input.pdf,
+            html: input.html,
+            txt: input.txt,
+            smtp_eml: input.smtp_eml,
+            ftp: input.ftp,
+            giganto: input.giganto,
+            giganto_ingestion_ip: input.giganto_ingestion_ip,
+            giganto_ingestion_port: input.giganto_ingestion_port,
+            giganto_publish_ip: input.giganto_publish_ip,
+            giganto_publish_port: input.giganto_publish_port,
+            giganto_graphql_ip: input.giganto_graphql_ip,
+            giganto_graphql_port: input.giganto_graphql_port,
+            retention_period: input.retention_period,
+            reconverge: input.reconverge,
+            reconverge_review_ip: input.reconverge_review_ip,
+            reconverge_review_port: input.reconverge_review_port,
+            reconverge_giganto_ip: input.reconverge_giganto_ip,
+            reconverge_giganto_port: input.reconverge_giganto_port,
+            hog: input.hog,
+            hog_review_ip: input.hog_review_ip,
+            hog_review_port: input.hog_review_port,
+            hog_giganto_ip: input.hog_giganto_ip,
+            hog_giganto_port: input.hog_giganto_port,
+            protocols: input.protocols,
+            protocol_list: input.protocol_list.clone(),
+            sensors: input.sensors,
+            sensor_list: input.sensor_list.clone(),
+        }
+    }
+}
+
 #[derive(Clone, Deserialize, Serialize, SimpleObject, PartialEq)]
 #[graphql(complex)]
 pub(super) struct Node {
@@ -180,19 +227,16 @@ pub(super) struct Node {
     creation_time: DateTime<Utc>,
 }
 
-impl IndexedMapUpdate for Node {
-    type Entry = Self;
-
-    fn key(&self) -> Option<Cow<[u8]>> {
-        Some(Indexable::key(self))
-    }
-
-    fn apply(&self, _value: Self::Entry) -> anyhow::Result<Self::Entry> {
-        Ok(self.clone())
-    }
-
-    fn verify(&self, value: &Self::Entry) -> bool {
-        self == value
+impl From<review_database::Node> for Node {
+    fn from(input: review_database::Node) -> Self {
+        Self {
+            id: input.id,
+            name: input.name,
+            name_draft: input.name_draft,
+            settings: input.setting.map(Into::into),
+            settings_draft: input.setting_draft.map(Into::into),
+            creation_time: input.creation_time,
+        }
     }
 }
 
@@ -200,46 +244,6 @@ impl IndexedMapUpdate for Node {
 impl Node {
     async fn id(&self) -> ID {
         ID(self.id.to_string())
-    }
-}
-
-pub(super) struct NodeDraft {
-    name: String,
-    pub name_draft: Option<String>,
-    pub settings_draft: Option<NodeSettingsInput>,
-}
-
-impl IndexedMapUpdate for NodeDraft {
-    type Entry = Node;
-
-    fn key(&self) -> Option<Cow<[u8]>> {
-        Some(Cow::Borrowed(self.name.as_bytes()))
-    }
-
-    fn apply(&self, mut value: Self::Entry) -> Result<Self::Entry, anyhow::Error> {
-        if let Some(settings_draft) = self.settings_draft.as_ref() {
-            value.name_draft = self.name_draft.clone();
-            value.settings_draft = Some(NodeSettings::try_from(settings_draft)?);
-        } else {
-            value.name_draft = None;
-            value.settings_draft = None;
-        }
-        Ok(value)
-    }
-
-    fn verify(&self, _value: &Self::Entry) -> bool {
-        error!("This is not expected to be called. There is nothing to verify");
-        true
-    }
-}
-
-impl NodeDraft {
-    fn new_with(name: &str, node_draft_input: NodeDraftInput) -> Self {
-        Self {
-            name: name.to_string(),
-            name_draft: node_draft_input.name_draft,
-            settings_draft: node_draft_input.settings_draft,
-        }
     }
 }
 
@@ -286,36 +290,6 @@ impl NodeTotalCount {
     async fn total_count(&self, ctx: &Context<'_>) -> Result<usize> {
         let store = crate::graphql::get_store(ctx).await?;
         Ok(store.node_map().count()?)
-    }
-}
-
-impl FromKeyValue for Node {
-    fn from_key_value(_key: &[u8], value: &[u8]) -> anyhow::Result<Self> {
-        Ok(bincode::DefaultOptions::new().deserialize(value)?)
-    }
-}
-
-impl Indexable for Node {
-    fn key(&self) -> Cow<[u8]> {
-        Cow::Borrowed(self.name.as_bytes())
-    }
-
-    fn index(&self) -> u32 {
-        self.id
-    }
-
-    fn make_indexed_key(key: Cow<[u8]>, _index: u32) -> Cow<[u8]> {
-        key
-    }
-
-    fn value(&self) -> Vec<u8> {
-        bincode::DefaultOptions::new()
-            .serialize(self)
-            .expect("serializable")
-    }
-
-    fn set_index(&mut self, index: u32) {
-        self.id = index;
     }
 }
 
