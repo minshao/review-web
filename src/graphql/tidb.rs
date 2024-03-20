@@ -1,6 +1,6 @@
 use super::{Role, RoleGuard};
 use async_graphql::{Context, Enum, Object, Result, SimpleObject};
-use review_database::{self as database, IterableMap};
+use review_database::{self as database};
 
 #[derive(Default)]
 pub(super) struct TidbQuery;
@@ -12,7 +12,11 @@ impl TidbQuery {
         .or(RoleGuard::new(Role::SecurityAdministrator))")]
     async fn tidb(&self, ctx: &Context<'_>, name: String) -> Result<Tidb> {
         let store = super::get_store(ctx).await?;
-        Ok(database::Tidb::get(&store, &name)?.into())
+        let table = store.tidb_map();
+        let Some(tidb) = table.get(&name)? else {
+            return Err("no such tidb".into());
+        };
+        Ok(tidb.into())
     }
 
     /// A list of ti databases
@@ -20,8 +24,9 @@ impl TidbQuery {
         .or(RoleGuard::new(Role::SecurityAdministrator))")]
     async fn tidb_list(&self, ctx: &Context<'_>) -> Result<Vec<Tidb>> {
         let store = super::get_store(ctx).await?;
-        let list = database::Tidb::get_list(&store)?;
-        Ok(list.into_iter().map(Into::into).collect())
+        let table = store.tidb_map();
+
+        Ok(table.get_list()?.into_iter().map(Into::into).collect())
     }
 
     /// A query for detail information of a rule
@@ -38,7 +43,14 @@ impl TidbQuery {
             .parse::<u32>()
             .map_err(|_| "invalid rule ID")?;
         let store = super::get_store(ctx).await?;
-        Ok(database::Tidb::get_rule(&store, &name, rule_id)?.map(Into::into))
+        let table = store.tidb_map();
+        let Some(tidb) = table.get(&name)? else {
+            return Err("no such tidb".into());
+        };
+        tidb.patterns
+            .into_iter()
+            .find(|rule| rule.rule_id == rule_id)
+            .map_or(Ok(None), |rule| Ok(Some(rule.into())))
     }
 }
 
@@ -48,17 +60,23 @@ pub(super) struct TidbMutation;
 #[Object]
 impl TidbMutation {
     /// Inserts a new Tidb, overwriting any existing database with same name
+    /// `dbfile` should be encoded string of `Tidb` instance that is serialized
+    /// with `bincode::DefaultOptions::new().serialize`.
     /// Returns name and version.
     #[graphql(guard = "RoleGuard::new(Role::SystemAdministrator)
         .or(RoleGuard::new(Role::SecurityAdministrator))")]
     async fn insert_tidb(&self, ctx: &Context<'_>, dbfile: String) -> Result<TidbOutput> {
         let tidb = database::Tidb::new(&dbfile)?;
+        let output = TidbOutput {
+            name: tidb.name.clone(),
+            version: tidb.version.clone(),
+        };
+
         let store = super::get_store(ctx).await?;
-        tidb.insert(&store)?;
-        Ok(TidbOutput {
-            name: tidb.name,
-            version: tidb.version,
-        })
+        let table = store.tidb_map();
+        table.insert(tidb)?;
+
+        Ok(output)
     }
 
     /// Removes Tidb, returning the name and version of database that removed
@@ -72,9 +90,10 @@ impl TidbMutation {
         #[graphql(validator(min_items = 1))] names: Vec<String>,
     ) -> Result<Vec<String>> {
         let store = super::get_store(ctx).await?;
+        let table = store.tidb_map();
         let mut removed = Vec::with_capacity(names.len());
         for name in names {
-            match database::Tidb::remove(&store, &name) {
+            match table.remove(&name) {
                 Ok(()) => removed.push(name),
                 Err(e) => return Err(format!("{e:?}").into()),
             };
@@ -83,6 +102,8 @@ impl TidbMutation {
     }
 
     /// Updates the given Tidb, returning the Tidb ID that was updated.
+    /// `new` should be encoded string of `Tidb` instance that is serialized
+    /// with `bincode::DefaultOptions::new().serialize`.
     ///
     /// Will return error if old and new tidb name is different
     #[graphql(guard = "RoleGuard::new(Role::SystemAdministrator)
@@ -94,12 +115,15 @@ impl TidbMutation {
         new: String,
     ) -> Result<TidbOutput> {
         let tidb = database::Tidb::new(&new)?;
+        let output = TidbOutput {
+            name: tidb.name.clone(),
+            version: tidb.version.clone(),
+        };
         let store = super::get_store(ctx).await?;
-        tidb.update(&store, &name)?;
-        Ok(TidbOutput {
-            name: tidb.name,
-            version: tidb.version,
-        })
+        let table = store.tidb_map();
+
+        table.update(&name, tidb)?;
+        Ok(output)
     }
 }
 
@@ -205,10 +229,12 @@ struct TidbTotalCount;
 impl TidbTotalCount {
     /// The total number of edges.
     async fn total_count(&self, ctx: &Context<'_>) -> Result<usize> {
+        use database::Iterable;
+
         let store = super::get_store(ctx).await?;
-        let map = store.tidb_map();
-        let count = map.iter_forward()?.count();
-        Ok(count)
+        let table = store.tidb_map();
+
+        Ok(table.iter(database::Direction::Forward, None).count())
     }
 }
 
