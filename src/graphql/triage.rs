@@ -304,6 +304,18 @@ pub(super) struct TriagePolicyInput {
     pub response: Vec<ResponseInput>,
 }
 
+impl From<TriagePolicyInput> for database::TriagePolicyUpdate {
+    fn from(input: TriagePolicyInput) -> Self {
+        Self {
+            name: input.name,
+            ti_db: input.ti_db.iter().map(Into::into).collect(),
+            packet_attr: input.packet_attr.iter().map(Into::into).collect(),
+            confidence: input.confidence.iter().map(Into::into).collect(),
+            response: input.response.iter().map(Into::into).collect(),
+        }
+    }
+}
+
 impl From<&PacketAttrInput> for database::PacketAttr {
     fn from(p: &PacketAttrInput) -> Self {
         Self {

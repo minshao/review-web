@@ -1,5 +1,3 @@
-use std::borrow::Cow;
-
 use super::{
     ConfidenceInput, PacketAttrInput, ResponseInput, TiInput, TriagePolicy, TriagePolicyInput,
     TriagePolicyMutation, TriagePolicyQuery,
@@ -10,9 +8,7 @@ use async_graphql::{
     Context, Object, Result, ID,
 };
 use chrono::Utc;
-use review_database::{
-    self as database, Indexed, IndexedMap, IndexedMapIterator, IndexedMapUpdate,
-};
+use review_database::{self as database};
 
 struct TriagePolicyTotalCount;
 
@@ -72,14 +68,7 @@ async fn load(
 ) -> Result<Connection<String, TriagePolicy, TriagePolicyTotalCount, EmptyFields>> {
     let store = crate::graphql::get_store(ctx).await?;
     let map = store.triage_policy_map();
-    super::super::load::<
-        '_,
-        IndexedMap,
-        IndexedMapIterator,
-        TriagePolicy,
-        database::TriagePolicy,
-        TriagePolicyTotalCount,
-    >(&map, after, before, first, last, TriagePolicyTotalCount)
+    super::super::load_edges(&map, after, before, first, last, TriagePolicyTotalCount)
 }
 
 #[Object]
@@ -125,7 +114,7 @@ impl TriagePolicyMutation {
 
         let store = crate::graphql::get_store(ctx).await?;
         let map = store.triage_policy_map();
-        let id = map.insert(triage)?;
+        let id = map.put(triage)?;
 
         Ok(ID(id.to_string()))
     }
@@ -146,7 +135,7 @@ impl TriagePolicyMutation {
         let mut removed = Vec::<String>::with_capacity(ids.len());
         for id in ids {
             let i = id.as_str().parse::<u32>().map_err(|_| "invalid ID")?;
-            let key = map.remove::<review_database::TriagePolicy>(i)?;
+            let key = map.remove(i)?;
 
             let name = match String::from_utf8(key) {
                 Ok(key) => key,
@@ -169,95 +158,13 @@ impl TriagePolicyMutation {
         new: TriagePolicyInput,
     ) -> Result<ID> {
         let i = id.as_str().parse::<u32>().map_err(|_| "invalid ID")?;
+        let old = old.into();
+        let new = new.into();
 
         let store = crate::graphql::get_store(ctx).await?;
-        let map = store.triage_policy_map();
+        let mut map = store.triage_policy_map();
         map.update(i, &old, &new)?;
 
         Ok(id)
-    }
-}
-
-impl IndexedMapUpdate for TriagePolicyInput {
-    type Entry = database::TriagePolicy;
-
-    fn key(&self) -> Option<Cow<[u8]>> {
-        Some(Cow::Borrowed(self.name.as_bytes()))
-    }
-
-    fn apply(&self, mut value: Self::Entry) -> Result<Self::Entry, anyhow::Error> {
-        value.name.clear();
-        value.name.push_str(&self.name);
-        let mut ti_db = self
-            .ti_db
-            .iter()
-            .map(Into::into)
-            .collect::<Vec<database::Ti>>();
-        ti_db.sort_unstable();
-        value.ti_db = ti_db;
-        let mut packet_attr: Vec<database::PacketAttr> = Vec::new();
-        for p in &self.packet_attr {
-            packet_attr.push(p.into());
-        }
-        packet_attr.sort_unstable();
-        value.packet_attr = packet_attr;
-        let mut confidence = self
-            .confidence
-            .iter()
-            .map(Into::into)
-            .collect::<Vec<database::Confidence>>();
-        confidence.sort_unstable();
-        value.confidence = confidence;
-        let mut response = self
-            .response
-            .iter()
-            .map(Into::into)
-            .collect::<Vec<database::Response>>();
-        response.sort_unstable();
-        value.response = response;
-
-        Ok(value)
-    }
-
-    fn verify(&self, value: &Self::Entry) -> bool {
-        if self.name != value.name {
-            return false;
-        }
-        let mut ti_db = self
-            .ti_db
-            .iter()
-            .map(Into::into)
-            .collect::<Vec<database::Ti>>();
-        ti_db.sort_unstable();
-        if ti_db != value.ti_db {
-            return false;
-        }
-        let mut packet_attr: Vec<database::PacketAttr> = Vec::new();
-        for p in &self.packet_attr {
-            packet_attr.push(p.into());
-        }
-        packet_attr.sort_unstable();
-        if packet_attr != value.packet_attr {
-            return false;
-        }
-        let mut confidence = self
-            .confidence
-            .iter()
-            .map(Into::into)
-            .collect::<Vec<database::Confidence>>();
-        confidence.sort_unstable();
-        if confidence != value.confidence {
-            return false;
-        }
-        let mut response = self
-            .response
-            .iter()
-            .map(Into::into)
-            .collect::<Vec<database::Response>>();
-        response.sort_unstable();
-        if response != value.response {
-            return false;
-        }
-        true
     }
 }
