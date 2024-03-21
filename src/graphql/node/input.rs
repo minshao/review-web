@@ -1,9 +1,7 @@
-use super::{Node, NodeSettings, PortNumber};
+use super::PortNumber;
 use anyhow::Context as AnyhowContext;
 use async_graphql::{types::ID, InputObject, Result};
-use review_database::IndexedMapUpdate;
-use std::{borrow::Cow, collections::HashMap, net::IpAddr};
-use tracing::error;
+use std::{collections::HashMap, net::IpAddr};
 
 #[allow(clippy::module_name_repetitions)]
 #[derive(Clone, InputObject)]
@@ -58,64 +56,11 @@ pub struct NodeSettingsInput {
     pub sensor_list: HashMap<String, bool>,
 }
 
-impl PartialEq<NodeSettings> for NodeSettingsInput {
-    fn eq(&self, other: &NodeSettings) -> bool {
-        self.customer_id.as_str().parse::<u32>() == Ok(other.customer_id)
-            && self.description == other.description
-            && self.hostname == other.hostname
-            && self.review == other.review
-            && self.review_port == other.review_port
-            && self.review_web_port == other.review_web_port
-            && self.piglet == other.piglet
-            && parse_str_to_ip(self.piglet_giganto_ip.as_deref()) == other.piglet_giganto_ip
-            && self.piglet_giganto_port == other.piglet_giganto_port
-            && parse_str_to_ip(self.piglet_review_ip.as_deref()) == other.piglet_review_ip
-            && self.piglet_review_port == other.piglet_review_port
-            && self.save_packets == other.save_packets
-            && self.http == other.http
-            && self.office == other.office
-            && self.exe == other.exe
-            && self.pdf == other.pdf
-            && self.html == other.html
-            && self.txt == other.txt
-            && self.smtp_eml == other.smtp_eml
-            && self.ftp == other.ftp
-            && self.giganto == other.giganto
-            && parse_str_to_ip(self.giganto_ingestion_ip.as_deref()) == other.giganto_ingestion_ip
-            && self.giganto_ingestion_port == other.giganto_ingestion_port
-            && parse_str_to_ip(self.giganto_publish_ip.as_deref()) == other.giganto_publish_ip
-            && self.giganto_publish_port == other.giganto_publish_port
-            && parse_str_to_ip(self.giganto_graphql_ip.as_deref()) == other.giganto_graphql_ip
-            && self.giganto_graphql_port == other.giganto_graphql_port
-            && self.retention_period == other.retention_period
-            && self.reconverge == other.reconverge
-            && parse_str_to_ip(self.reconverge_review_ip.as_deref()) == other.reconverge_review_ip
-            && self.reconverge_review_port == other.reconverge_review_port
-            && parse_str_to_ip(self.reconverge_giganto_ip.as_deref()) == other.reconverge_giganto_ip
-            && self.reconverge_giganto_port == other.reconverge_giganto_port
-            && self.hog == other.hog
-            && parse_str_to_ip(self.hog_review_ip.as_deref()) == other.hog_review_ip
-            && self.hog_review_port == other.hog_review_port
-            && parse_str_to_ip(self.hog_giganto_ip.as_deref()) == other.hog_giganto_ip
-            && self.hog_giganto_port == other.hog_giganto_port
-            && self.protocols == other.protocols
-            && self.protocol_list == other.protocol_list
-            && self.sensors == other.sensors
-            && self.sensor_list == other.sensor_list
-    }
-}
-
-impl PartialEq<NodeSettingsInput> for NodeSettings {
-    fn eq(&self, other: &NodeSettingsInput) -> bool {
-        other.eq(self)
-    }
-}
-
-impl TryFrom<&NodeSettingsInput> for NodeSettings {
+impl TryFrom<NodeSettingsInput> for review_database::NodeSetting {
     type Error = anyhow::Error;
 
-    fn try_from(input: &NodeSettingsInput) -> Result<Self, Self::Error> {
-        Ok(NodeSettings {
+    fn try_from(input: NodeSettingsInput) -> Result<Self, Self::Error> {
+        Ok(Self {
             customer_id: input.customer_id.parse().context("invalid customer ID")?,
             description: input.description.clone(),
             hostname: input.hostname.clone(),
@@ -175,6 +120,19 @@ pub(super) struct NodeInput {
     pub settings_draft: Option<NodeSettingsInput>,
 }
 
+impl TryFrom<NodeInput> for review_database::NodeUpdate {
+    type Error = anyhow::Error;
+
+    fn try_from(input: NodeInput) -> Result<Self, Self::Error> {
+        Ok(Self {
+            name: Some(input.name),
+            name_draft: input.name_draft,
+            setting: input.settings.map(TryInto::try_into).transpose()?,
+            setting_draft: input.settings_draft.map(TryInto::try_into).transpose()?,
+        })
+    }
+}
+
 #[allow(clippy::module_name_repetitions)]
 #[derive(Clone, InputObject)]
 pub(super) struct NodeDraftInput {
@@ -182,39 +140,19 @@ pub(super) struct NodeDraftInput {
     pub settings_draft: Option<NodeSettingsInput>,
 }
 
-impl IndexedMapUpdate for NodeInput {
-    type Entry = Node;
-
-    fn key(&self) -> Option<Cow<[u8]>> {
-        Some(Cow::Borrowed(self.name.as_bytes()))
-    }
-
-    fn apply(&self, value: Self::Entry) -> Result<Self::Entry, anyhow::Error> {
-        error!("This is not expected to be called. Nothing will be applied to DB.");
-        Ok(value)
-    }
-
-    fn verify(&self, value: &Self::Entry) -> bool {
-        let name_matches = self.name == value.name;
-
-        let name_draft_matches = match (&self.name_draft, &value.name_draft) {
-            (Some(input_value), Some(db_value)) => input_value == db_value,
-            (Some(_), None) | (None, Some(_)) => false,
-            (None, None) => true,
-        };
-
-        let setting_matches = match (&self.settings, &value.settings) {
-            (Some(input_value), Some(db_value)) => input_value == db_value,
-            (Some(_), None) | (None, Some(_)) => false,
-            (None, None) => true,
-        };
-
-        let setting_draft_matches = match (&self.settings_draft, &value.settings_draft) {
-            (Some(input_value), Some(db_value)) => input_value == db_value,
-            (Some(_), None) | (None, Some(_)) => false,
-            (None, None) => true,
-        };
-
-        name_matches && name_draft_matches && setting_matches && setting_draft_matches
-    }
+pub(super) fn create_draft_update(
+    old: &NodeInput,
+    new: NodeDraftInput,
+) -> Result<review_database::NodeUpdate> {
+    let (name_draft, setting_draft) = if let Some(draft) = new.settings_draft {
+        (new.name_draft, Some(draft.try_into()?))
+    } else {
+        (None, None)
+    };
+    Ok(review_database::NodeUpdate {
+        name: Some(old.name.clone()),
+        name_draft,
+        setting: old.settings.clone().map(TryInto::try_into).transpose()?,
+        setting_draft,
+    })
 }

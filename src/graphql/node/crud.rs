@@ -5,17 +5,16 @@ use crate::graphql::{customer::broadcast_customer_networks, get_customer_network
 use super::{
     super::{Role, RoleGuard},
     input::NodeDraftInput,
-    Node, NodeDraft, NodeInput, NodeMutation, NodeQuery, NodeSettings, NodeTotalCount, PortNumber,
-    ServerAddress, ServerPort, Setting,
+    Node, NodeInput, NodeMutation, NodeQuery, NodeTotalCount, PortNumber, ServerAddress,
+    ServerPort, Setting,
 };
 use async_graphql::{
     connection::{query, Connection, EmptyFields},
     types::ID,
     Context, Object, Result,
 };
-use bincode::Options;
 use chrono::Utc;
-use review_database::{Indexed, IterableMap, Store};
+use review_database::{Direction, Iterable, Store};
 use std::{
     collections::HashMap,
     net::{IpAddr, Ipv4Addr, SocketAddr},
@@ -56,7 +55,7 @@ impl NodeQuery {
         let Some(node) = map.get_by_id(i)? else {
             return Err("no such node".into());
         };
-        Ok(node)
+        Ok(node.into())
     }
 }
 
@@ -127,12 +126,12 @@ impl NodeMutation {
                 .parse::<u32>()
                 .map_err(|_| "invalid customer ID")?;
 
-            let value = Node {
+            let value = review_database::Node {
                 id: u32::MAX,
                 name,
                 name_draft: None,
-                settings: None,
-                settings_draft: Some(NodeSettings {
+                setting: None,
+                setting_draft: Some(review_database::NodeSetting {
                     customer_id,
                     description,
                     hostname,
@@ -210,7 +209,7 @@ impl NodeMutation {
                 }),
                 creation_time: Utc::now(),
             };
-            let id = map.insert(value)?;
+            let id = map.put(value)?;
             (id, customer_id)
         };
         if review {
@@ -241,7 +240,7 @@ impl NodeMutation {
         let mut removed = Vec::<String>::with_capacity(ids.len());
         for id in ids {
             let i = id.as_str().parse::<u32>().map_err(|_| "invalid ID")?;
-            let key = map.remove::<Node>(i)?;
+            let key = map.remove(i)?;
 
             let name = match String::from_utf8(key) {
                 Ok(key) => key,
@@ -264,9 +263,10 @@ impl NodeMutation {
     ) -> Result<ID> {
         let i = id.as_str().parse::<u32>().map_err(|_| "invalid ID")?;
         let store = crate::graphql::get_store(ctx).await?;
-        let map = store.node_map();
-        let node_draft = NodeDraft::new_with(&old.name, new);
-        map.update(i, &old, &node_draft)?;
+        let mut map = store.node_map();
+        let new = super::input::create_draft_update(&old, new)?;
+        let old = old.try_into()?;
+        map.update(i, &old, &new)?;
         Ok(id)
     }
 }
@@ -293,7 +293,7 @@ async fn load(
 ) -> Result<Connection<String, Node, NodeTotalCount, EmptyFields>> {
     let store = crate::graphql::get_store(ctx).await?;
     let map = store.node_map();
-    super::super::load(&map, after, before, first, last, NodeTotalCount)
+    super::super::load_edges(&map, after, before, first, last, NodeTotalCount)
 }
 
 /// Returns the node settings.
@@ -305,12 +305,10 @@ async fn load(
 pub fn get_node_settings(db: &Store) -> Result<Vec<Setting>> {
     let map = db.node_map();
     let mut output = Vec::new();
-    for (_key, value) in map.iter_forward()? {
-        let node: Node = bincode::DefaultOptions::new()
-            .deserialize::<Node>(value.as_ref())
-            .map_err(|_| "invalid value in database")?;
+    for res in map.iter(Direction::Forward, None) {
+        let node = res.map_err(|_| "invalid value in database")?;
 
-        let node_setting = node.settings.ok_or("Applied node settings do not exist")?;
+        let node_setting = node.setting.ok_or("Applied node settings do not exist")?;
 
         let piglet: Option<ServerAddress> = if node_setting.piglet {
             Some(ServerAddress {
@@ -428,12 +426,10 @@ pub fn get_node_settings(db: &Store) -> Result<Vec<Setting>> {
 #[allow(clippy::module_name_repetitions)]
 pub fn get_customer_id_of_review_host(db: &Store) -> Result<Option<u32>> {
     let map = db.node_map();
-    for (_key, value) in map.iter_forward()? {
-        let node = bincode::DefaultOptions::new()
-            .deserialize::<Node>(value.as_ref())
-            .map_err(|_| "invalid value in database")?;
+    for entry in map.iter(Direction::Forward, None) {
+        let node = entry.map_err(|_| "invalid value in database")?;
 
-        if let Some(node_settings) = &node.settings {
+        if let Some(node_settings) = &node.setting {
             if node_settings.review {
                 return Ok(Some(node_settings.customer_id));
             }
