@@ -6,8 +6,8 @@ use async_graphql::{
 };
 use bincode::Options;
 use chrono::{DateTime, Utc};
-use database::types::FromKeyValue;
-use review_database::{self as database, IterableMap, Store};
+use database::{types::FromKeyValue, Direction, Iterable};
+use review_database::{self as database, Store};
 
 #[derive(Default)]
 pub(super) struct UserAgentQuery;
@@ -54,7 +54,11 @@ impl UserAgentMutation {
         let store = crate::graphql::get_store(ctx).await?;
         let map = store.trusted_user_agent_map();
         for user_agent in user_agents {
-            map.put(user_agent.as_bytes(), Utc::now().to_string().as_bytes())?;
+            let entry = review_database::TrustedUserAgent {
+                user_agent,
+                updated_at: Utc::now(),
+            };
+            map.put(&entry)?;
         }
         Ok(true)
     }
@@ -70,7 +74,7 @@ impl UserAgentMutation {
         let store = crate::graphql::get_store(ctx).await?;
         let map = store.trusted_user_agent_map();
         for user_agent in user_agents {
-            map.delete(user_agent.as_bytes())?;
+            map.remove(&user_agent)?;
         }
         Ok(true)
     }
@@ -86,12 +90,12 @@ impl UserAgentMutation {
     ) -> Result<bool> {
         let store = crate::graphql::get_store(ctx).await?;
         let map = store.trusted_user_agent_map();
-        let old_timestamp = map.get(old.as_bytes())?.unwrap();
-        let new_timestamp = Utc::now().to_string();
-        map.update(
-            (old.as_bytes(), old_timestamp.as_ref()),
-            (new.as_bytes(), new_timestamp.as_bytes()),
-        )?;
+        let new = review_database::TrustedUserAgent {
+            user_agent: new,
+            updated_at: Utc::now(),
+        };
+
+        map.update(&old, &new)?;
         Ok(true)
     }
 
@@ -114,6 +118,15 @@ impl UserAgentMutation {
 struct TrustedUserAgent {
     user_agent: String,
     updated_at: DateTime<Utc>,
+}
+
+impl From<review_database::TrustedUserAgent> for TrustedUserAgent {
+    fn from(input: review_database::TrustedUserAgent) -> Self {
+        Self {
+            user_agent: input.user_agent,
+            updated_at: input.updated_at,
+        }
+    }
 }
 
 impl FromKeyValue for TrustedUserAgent {
@@ -139,8 +152,8 @@ impl TrustedUserAgentTotalCount {
     async fn total_count(&self, ctx: &Context<'_>) -> Result<usize> {
         let store = crate::graphql::get_store(ctx).await?;
         let map = store.trusted_user_agent_map();
-        let count = map.iter_forward()?.count();
-        Ok(count)
+
+        Ok(map.iter(Direction::Forward, None).count())
     }
 }
 
@@ -151,12 +164,10 @@ impl TrustedUserAgentTotalCount {
 /// Returns an error if the user agent list database could not be retrieved.
 pub fn get_trusted_user_agent_list(db: &Store) -> Result<Vec<String>> {
     let map = db.trusted_user_agent_map();
-    let mut user_agent_list = vec![];
-    for (key, _value) in map.iter_forward()? {
-        let user_agent = String::from_utf8(key.to_vec())?;
-        user_agent_list.push(user_agent);
-    }
-    Ok(user_agent_list)
+    Ok(map
+        .iter(Direction::Forward, None)
+        .map(|res| res.map(|entry| entry.user_agent))
+        .collect::<Result<Vec<_>, anyhow::Error>>()?)
 }
 
 async fn load(
@@ -168,5 +179,5 @@ async fn load(
 ) -> Result<Connection<String, TrustedUserAgent, TrustedUserAgentTotalCount, EmptyFields>> {
     let store = crate::graphql::get_store(ctx).await?;
     let map = store.trusted_user_agent_map();
-    super::load(&map, after, before, first, last, TrustedUserAgentTotalCount)
+    super::load_edges(&map, after, before, first, last, TrustedUserAgentTotalCount)
 }

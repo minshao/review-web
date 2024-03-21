@@ -453,31 +453,6 @@ where
     Ok(connection)
 }
 
-fn load<'m, M, I, N, NI, T>(
-    map: &'m M,
-    after: Option<String>,
-    before: Option<String>,
-    first: Option<usize>,
-    last: Option<usize>,
-    total_count: T,
-) -> Result<Connection<String, N, T, EmptyFields>>
-where
-    M: IterableMap<'m, I>,
-    I: Iterator<Item = (Box<[u8]>, Box<[u8]>)> + 'm,
-    N: From<NI> + OutputType,
-    NI: FromKeyValue,
-    T: ObjectType,
-{
-    let (nodes, has_previous, has_next) =
-        load_nodes_with_filter(map, |x| Some(x), after, before, first, last)?;
-
-    let mut connection = Connection::with_additional_fields(has_previous, has_next, total_count);
-    connection
-        .edges
-        .extend(nodes.into_iter().map(|(k, ev)| Edge::new(k, ev)));
-    Ok(connection)
-}
-
 fn iter_to_nodes_with_filter<I, N, NI>(
     iter: I,
     to: &[u8],
