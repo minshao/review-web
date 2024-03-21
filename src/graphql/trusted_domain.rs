@@ -1,4 +1,4 @@
-use super::{AgentManager, BoxedAgentManager, FromKeyValue, Role, RoleGuard};
+use super::{AgentManager, BoxedAgentManager, Role, RoleGuard};
 use async_graphql::{
     connection::{query, Connection, EmptyFields},
     Context, Object, Result, SimpleObject,
@@ -47,11 +47,13 @@ impl TrustedDomainMutation {
         name: String,
         remarks: String,
     ) -> Result<String> {
-        {
+        let name = {
             let store = crate::graphql::get_store(ctx).await?;
-            let map = store.trusted_dns_server_map();
-            map.put(name.as_bytes(), remarks.as_bytes())?;
-        }
+            let map = store.trusted_domain_map();
+            let entry = review_database::TrustedDomain { name, remarks };
+            map.put(&entry)?;
+            entry.name
+        };
 
         let agent_manager = ctx.data::<BoxedAgentManager>()?;
         agent_manager.broadcast_trusted_domains().await?;
@@ -65,8 +67,8 @@ impl TrustedDomainMutation {
     async fn remove_trusted_domain(&self, ctx: &Context<'_>, name: String) -> Result<String> {
         {
             let store = crate::graphql::get_store(ctx).await?;
-            let map = store.trusted_dns_server_map();
-            map.delete(name.as_bytes())?;
+            let map = store.trusted_domain_map();
+            map.remove(&name)?;
         }
 
         let agent_manager = ctx.data::<Box<dyn AgentManager>>()?;
@@ -81,12 +83,12 @@ pub(super) struct TrustedDomain {
     remarks: String,
 }
 
-impl FromKeyValue for TrustedDomain {
-    fn from_key_value(key: &[u8], value: &[u8]) -> Result<Self, anyhow::Error> {
-        Ok(TrustedDomain {
-            name: String::from_utf8_lossy(key).into_owned(),
-            remarks: String::from_utf8_lossy(value).into_owned(),
-        })
+impl From<review_database::TrustedDomain> for TrustedDomain {
+    fn from(input: review_database::TrustedDomain) -> Self {
+        Self {
+            name: input.name,
+            remarks: input.remarks,
+        }
     }
 }
 
@@ -98,8 +100,8 @@ async fn load(
     last: Option<usize>,
 ) -> Result<Connection<String, TrustedDomain, EmptyFields, EmptyFields>> {
     let store = crate::graphql::get_store(ctx).await?;
-    let map = store.trusted_dns_server_map();
-    super::load(&map, after, before, first, last, EmptyFields)
+    let map = store.trusted_domain_map();
+    super::load_edges(&map, after, before, first, last, EmptyFields)
 }
 
 #[cfg(test)]
