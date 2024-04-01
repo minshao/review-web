@@ -101,7 +101,11 @@ impl AgentManager for Manager {
         bail!("Crusher nodes are unreachable")
     }
 
-    async fn get_config(&self, hostname: &str, agent_id: &str) -> Result<oinq::Config, Error> {
+    async fn get_config(
+        &self,
+        hostname: &str,
+        agent_id: &str,
+    ) -> Result<review_protocol::types::Config, Error> {
         bail!("Agent {agent_id}@{hostname} is unreachable")
     }
 
@@ -129,7 +133,7 @@ impl AgentManager for Manager {
         &self,
         hostname: &str,
         agent_id: &str,
-        _config: &oinq::Config,
+        _config: &review_protocol::types::Config,
     ) -> Result<(), Error> {
         bail!("Agent {agent_id}@{hostname} is unreachable")
     }
