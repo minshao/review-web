@@ -1,11 +1,12 @@
 use super::{
-    super::{validate_and_process_pagination_params, BoxedAgentManager, Role, RoleGuard},
-    ModuleName, Node, NodeStatus, NodeStatusQuery, NodeStatusTotalCount,
+    super::{BoxedAgentManager, Role, RoleGuard},
+    ModuleName, NodeStatus, NodeStatusQuery, NodeStatusTotalCount,
 };
 use async_graphql::{
     connection::{query, Connection, Edge, EmptyFields},
     Context, Object, Result,
 };
+use review_database::UniqueKey;
 use roxy::ResourceUsage;
 use std::collections::{HashMap, HashSet};
 
@@ -22,9 +23,6 @@ impl NodeStatusQuery {
         first: Option<i32>,
         last: Option<i32>,
     ) -> Result<Connection<String, NodeStatus, NodeStatusTotalCount, EmptyFields>> {
-        let (after, before, first, last) =
-            validate_and_process_pagination_params(after, before, first, last)?;
-
         query(
             after,
             before,
@@ -70,15 +68,15 @@ async fn load(
     let review_hostname = roxy::hostname();
 
     let store = crate::graphql::get_store(ctx).await?;
-    let (node_list, has_previous, has_next): (Vec<(String, Node)>, bool, bool) = {
+    let (node_list, has_previous, has_next) = {
         let map = store.node_map();
-        super::super::load_nodes(&map, after, before, first, last)?
+        super::super::load_nodes(&map, after, before, first, last, None)?
     };
 
     let mut connection =
         Connection::with_additional_fields(has_previous, has_next, NodeStatusTotalCount);
 
-    for (k, ev) in node_list {
+    for ev in node_list {
         let (
             review,
             piglet,
@@ -214,7 +212,7 @@ async fn load(
             ),
         };
         connection.edges.push(Edge::new(
-            k,
+            crate::graphql::encode_cursor(&ev.unique_key()),
             NodeStatus::new(
                 ev.id,
                 ev.name,

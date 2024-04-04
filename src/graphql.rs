@@ -53,14 +53,9 @@ use async_graphql::{
 use chrono::TimeDelta;
 use data_encoding::BASE64;
 use num_traits::ToPrimitive;
-use review_database::{
-    self as database, types::FromKeyValue, Database, Direction, IterableMap, Role, Store,
-};
+use review_database::{self as database, Database, Direction, Role, Store};
 pub use roxy::{Process, ResourceUsage};
-use std::{
-    cmp,
-    sync::{Arc, Mutex},
-};
+use std::sync::{Arc, Mutex};
 use tokio::sync::{Notify, RwLock};
 use tracing::warn;
 use vinum::signal;
@@ -192,203 +187,66 @@ const DEFAULT_CUTOFF_RATE: f64 = 0.1;
 const DEFAULT_TRENDI_ORDER: i32 = 4;
 
 #[allow(clippy::type_complexity)] // since this is called within `load` only
-fn load_nodes<I, R, N>(
+fn load_nodes<I, R>(
     table: &I,
     after: Option<String>,
     before: Option<String>,
     first: Option<usize>,
     last: Option<usize>,
-) -> Result<(Vec<(String, N)>, bool, bool)>
+    prefix: Option<&[u8]>,
+) -> Result<(Vec<R>, bool, bool)>
 where
     I: database::Iterable<R>,
     R: database::types::FromKeyValue + database::UniqueKey,
-    N: From<R> + OutputType,
 {
+    let (after, before, first, last) = validate_and_process_pagination_params(
+        after,
+        before,
+        first.map(|f| i32::try_from(f).expect("valid size")),
+        last.map(|l| i32::try_from(l).expect("valid size")),
+    )?;
     let (nodes, has_previous, has_next) = if let Some(first) = first {
-        let (nodes, has_more) = collect_edges(table, Direction::Forward, after, before, first);
+        let (nodes, has_more) = collect_edges(
+            table,
+            Direction::Forward,
+            after,
+            before,
+            prefix,
+            first.to_usize().expect("valid size"),
+        );
         (nodes, false, has_more)
     } else {
         let Some(last) = last else { unreachable!() };
-        let (mut nodes, has_more) = collect_edges(table, Direction::Reverse, before, after, last);
+        let (mut nodes, has_more) = collect_edges(
+            table,
+            Direction::Reverse,
+            before,
+            after,
+            prefix,
+            last.to_usize().expect("valid size"),
+        );
         nodes.reverse();
         (nodes, has_more, false)
     };
     let nodes = nodes
         .into_iter()
-        .map(|res| {
-            res.map(|n| (encode_cursor(&n.unique_key()), n.into()))
-                .map_err(|e| format!("{e}").into())
-        })
+        .map(|res| res.map_err(|e| format!("{e}").into()))
         .collect::<Result<Vec<_>>>()?;
     Ok((nodes, has_previous, has_next))
-}
-
-#[allow(clippy::type_complexity)] // since this is called within `load` only
-fn load_nodes_with_filter<'m, M, I, N, NI>(
-    map: &'m M,
-    filter: fn(N) -> Option<N>,
-    after: Option<String>,
-    before: Option<String>,
-    first: Option<i32>,
-    last: Option<i32>,
-) -> Result<(Vec<(String, N)>, bool, bool)>
-where
-    M: IterableMap<'m, I>,
-    I: Iterator<Item = (Box<[u8]>, Box<[u8]>)> + 'm,
-    N: From<NI> + OutputType,
-    NI: FromKeyValue,
-{
-    if let Some(last) = last {
-        let iter = if let Some(before) = before {
-            let end = latest_key(&before)?;
-            map.iter_from(&end, Direction::Reverse)?
-        } else {
-            map.iter_backward()?
-        };
-
-        let (mut nodes, has_more) = if let Some(after) = after {
-            let to = earliest_key(&after)?;
-            iter_to_nodes_with_filter(
-                iter,
-                &to,
-                cmp::Ordering::is_ge,
-                filter,
-                last.to_usize().unwrap_or_default(),
-            )
-        } else {
-            iter_to_nodes_with_filter(
-                iter,
-                &[],
-                always_true,
-                filter,
-                last.to_usize().unwrap_or_default(),
-            )
-        }?;
-        nodes.reverse();
-        Ok((nodes, has_more, false))
-    } else {
-        let first = first
-            .and_then(|f| f.to_usize())
-            .unwrap_or(DEFAULT_CONNECTION_SIZE);
-        let iter = if let Some(after) = after {
-            let start = earliest_key(&after)?;
-            map.iter_from(&start, Direction::Forward)?
-        } else {
-            map.iter_forward()?
-        };
-
-        let (nodes, has_more) = if let Some(before) = before {
-            let to = latest_key(&before)?;
-            iter_to_nodes_with_filter(iter, &to, cmp::Ordering::is_le, filter, first)
-        } else {
-            iter_to_nodes_with_filter(iter, &[], always_true, filter, first)
-        }?;
-        Ok((nodes, false, has_more))
-    }
 }
 
 async fn get_store<'a>(ctx: &Context<'a>) -> Result<tokio::sync::RwLockReadGuard<'a, Store>> {
     Ok(ctx.data::<Arc<RwLock<Store>>>()?.read().await)
 }
 
-fn load_with_filter<'m, M, I, N, NI, T>(
-    map: &'m M,
-    filter: fn(N) -> Option<N>,
-    after: Option<String>,
-    before: Option<String>,
-    first: Option<i32>,
-    last: Option<i32>,
-    total_count: T,
-) -> Result<Connection<String, N, T, EmptyFields>>
-where
-    M: IterableMap<'m, I>,
-    I: Iterator<Item = (Box<[u8]>, Box<[u8]>)> + 'm,
-    N: From<NI> + OutputType,
-    NI: FromKeyValue,
-    T: ObjectType,
-{
-    let (nodes, has_previous, has_next) =
-        load_nodes_with_filter(map, filter, after, before, first, last)?;
-
-    let mut connection = Connection::with_additional_fields(has_previous, has_next, total_count);
-    connection
-        .edges
-        .extend(nodes.into_iter().map(|(k, ev)| Edge::new(k, ev)));
-    Ok(connection)
-}
-
-fn iter_to_nodes_with_filter<I, N, NI>(
-    iter: I,
-    to: &[u8],
-    cond: fn(cmp::Ordering) -> bool,
-    filter: fn(N) -> Option<N>,
-    len: usize,
-) -> Result<(Vec<(String, N)>, bool)>
-where
-    I: Iterator<Item = (Box<[u8]>, Box<[u8]>)>,
-    N: From<NI>,
-    NI: FromKeyValue,
-{
-    let mut nodes = Vec::new();
-    let mut exceeded = false;
-    for (k, v) in iter {
-        if !(cond)(k.as_ref().cmp(to)) {
-            break;
-        }
-
-        let cursor = BASE64.encode(&k);
-        let Some(node) = filter(NI::from_key_value(&k, &v)?.into()) else {
-            continue;
-        };
-
-        nodes.push((cursor, node));
-        exceeded = nodes.len() > len;
-        if exceeded {
-            break;
-        }
-    }
-    if exceeded {
-        nodes.pop();
-    }
-    Ok((nodes, exceeded))
-}
-
-fn earliest_key(after: &str) -> Result<Vec<u8>> {
-    let mut start = BASE64
-        .decode(after.as_bytes())
-        .map_err(|_| "invalid cursor `after`")?;
-    start.push(0);
-    Ok(start)
-}
-
-fn latest_key(before: &str) -> Result<Vec<u8>> {
-    let mut end = BASE64
-        .decode(before.as_bytes())
-        .map_err(|_| "invalid cursor `before`")?;
-    let last_byte = if let Some(b) = end.last_mut() {
-        *b
-    } else {
-        return Err("invalid cursor `before`".into());
-    };
-    end.pop();
-    if last_byte > 0 {
-        end.push(last_byte - 1);
-    }
-    Ok(end)
-}
-
 /// Decodes a cursor used in pagination.
-fn decode_cursor(cursor: &str) -> Option<String> {
-    String::from_utf8(BASE64.decode(cursor.as_bytes()).ok()?).ok()
+fn decode_cursor(cursor: &str) -> Option<Vec<u8>> {
+    BASE64.decode(cursor.as_bytes()).ok()
 }
 
 /// Encodes a cursor used in pagination.
 fn encode_cursor(cursor: &[u8]) -> String {
     BASE64.encode(cursor)
-}
-
-fn always_true(_ordering: cmp::Ordering) -> bool {
-    true
 }
 
 fn load_edges<I, R, N, A, NodesField>(
@@ -406,12 +264,33 @@ where
     A: ObjectType,
     NodesField: ConnectionNameType,
 {
+    let (after, before, first, last) = validate_and_process_pagination_params(
+        after,
+        before,
+        first.map(|f| i32::try_from(f).expect("valid size")),
+        last.map(|l| i32::try_from(l).expect("valid size")),
+    )?;
+
     let (nodes, has_previous, has_next) = if let Some(first) = first {
-        let (nodes, has_more) = collect_edges(table, Direction::Forward, after, before, first);
+        let (nodes, has_more) = collect_edges(
+            table,
+            Direction::Forward,
+            after,
+            before,
+            None,
+            first.to_usize().expect("valid size"),
+        );
         (nodes, false, has_more)
     } else {
         let Some(last) = last else { unreachable!() };
-        let (mut nodes, has_more) = collect_edges(table, Direction::Reverse, before, after, last);
+        let (mut nodes, has_more) = collect_edges(
+            table,
+            Direction::Reverse,
+            before,
+            after,
+            None,
+            last.to_usize().expect("valid size"),
+        );
         nodes.reverse();
         (nodes, has_more, false)
     };
@@ -434,8 +313,9 @@ where
 fn collect_edges<I, R>(
     table: &I,
     dir: Direction,
-    from: Option<String>,
-    to: Option<String>,
+    from: Option<Vec<u8>>,
+    to: Option<Vec<u8>>,
+    prefix: Option<&[u8]>,
     count: usize,
 ) -> (Vec<anyhow::Result<R>>, bool)
 where
@@ -443,21 +323,22 @@ where
     R: database::types::FromKeyValue + database::UniqueKey,
 {
     let edges: Box<dyn Iterator<Item = _>> = if let Some(cursor) = from {
-        let mut edges: Box<dyn Iterator<Item = _>> = Box::new(
-            (*table)
-                .iter(dir, Some(cursor.as_bytes()))
-                .skip_while(move |item| {
-                    if let Ok(x) = item {
-                        x.unique_key() == cursor.as_bytes()
-                    } else {
-                        false
-                    }
-                }),
-        );
+        let iter = if let Some(prefix) = prefix {
+            (*table).prefix_iter(dir, Some(&cursor), prefix)
+        } else {
+            (*table).iter(dir, Some(&cursor))
+        };
+        let mut edges: Box<dyn Iterator<Item = _>> = Box::new(iter.skip_while(move |item| {
+            if let Ok(x) = item {
+                x.unique_key() == cursor
+            } else {
+                false
+            }
+        }));
         if let Some(cursor) = to {
             edges = Box::new(edges.take_while(move |item| {
                 if let Ok(x) = item {
-                    x.unique_key().as_ref() < cursor.as_bytes()
+                    x.unique_key().as_ref() < cursor.as_slice()
                 } else {
                     false
                 }
@@ -465,11 +346,16 @@ where
         }
         edges
     } else {
-        let mut edges: Box<dyn Iterator<Item = _>> = Box::new(table.iter(dir, None));
+        let iter = if let Some(prefix) = prefix {
+            (*table).prefix_iter(dir, None, prefix)
+        } else {
+            (*table).iter(dir, None)
+        };
+        let mut edges: Box<dyn Iterator<Item = _>> = Box::new(iter);
         if let Some(cursor) = to {
             edges = Box::new(edges.take_while(move |item| {
                 if let Ok(x) = item {
-                    x.unique_key().as_ref() < cursor.as_bytes()
+                    x.unique_key().as_ref() < cursor.as_slice()
                 } else {
                     false
                 }
@@ -576,7 +462,7 @@ fn validate_and_process_pagination_params(
     before: Option<String>,
     mut first: Option<i32>,
     mut last: Option<i32>,
-) -> Result<(Option<String>, Option<String>, Option<i32>, Option<i32>)> {
+) -> Result<(Option<Vec<u8>>, Option<Vec<u8>>, Option<i32>, Option<i32>)> {
     match (
         first.is_some(),
         last.is_some(),
