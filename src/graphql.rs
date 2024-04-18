@@ -591,20 +591,22 @@ where
     (nodes, has_more)
 }
 
-struct RoleGuard {
-    role: database::Role,
+#[derive(Debug, PartialEq)]
+pub(crate) enum RoleGuard {
+    Role(database::Role),
+    Local,
 }
 
 impl RoleGuard {
     fn new(role: database::Role) -> Self {
-        Self { role }
+        Self::Role(role)
     }
 }
 
 #[async_trait::async_trait]
 impl Guard for RoleGuard {
     async fn check(&self, ctx: &Context<'_>) -> Result<()> {
-        if ctx.data_opt::<Role>() == Some(&self.role) {
+        if ctx.data_opt::<Self>() == Some(self) {
             Ok(())
         } else {
             Err("Forbidden".into())
@@ -838,7 +840,7 @@ impl TestSchema {
     async fn execute(&self, query: &str) -> async_graphql::Response {
         let request: async_graphql::Request = query.into();
         self.schema
-            .execute(request.data(Role::SystemAdministrator))
+            .execute(request.data(RoleGuard::Role(Role::SystemAdministrator)))
             .await
     }
 
@@ -848,7 +850,7 @@ impl TestSchema {
     ) -> impl futures_util::Stream<Item = async_graphql::Response> {
         let request: async_graphql::Request = subscription.into();
         self.schema
-            .execute_stream(request.data(Role::SystemAdministrator))
+            .execute_stream(request.data(RoleGuard::Role(Role::SystemAdministrator)))
     }
 }
 

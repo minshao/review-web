@@ -8,7 +8,7 @@ anyhow = "1"
 async-graphql = { version = "6", features = ["chrono", "string_number"] }
 async-graphql-axum = "6"
 async-trait = "0.1"
-axum = { version = "0.6", features = ["headers", "macros"] }
+axum = { version = "0.6", features = ["headers", "macros", "tokio"] }
 axum-server = { version = "0.5", features = ["tls-rustls"] }
 bincode = "1"
 chrono = { version = ">=0.4.35", default_features = false, features = [

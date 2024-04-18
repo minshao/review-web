@@ -171,6 +171,40 @@ impl AccountMutation {
         Ok(username)
     }
 
+    /// Resets system admin `password` for `username`.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if `username` is invalid,
+    /// or if the `account.role != Role::SystemAdministrator`.
+    #[graphql(guard = "RoleGuard::Local")]
+    async fn reset_admin_password(
+        &self,
+        ctx: &Context<'_>,
+        username: String,
+        password: String,
+    ) -> Result<String> {
+        let store = crate::graphql::get_store(ctx).await?;
+        let map = store.account_map();
+        if let Some(account) = map.get(&username)? {
+            if account.role == review_database::Role::SystemAdministrator {
+                map.update(
+                    username.as_bytes(),
+                    &Some(password),
+                    None,
+                    &None,
+                    &None,
+                    &None,
+                    &None,
+                )?;
+                return Ok(username);
+            }
+            return Err(format!("reset failed due to invalid access for {username}").into());
+        }
+
+        Err("reset failed due to invalid username".into())
+    }
+
     /// Removes accounts, returning the usernames that no longer exist.
     ///
     /// On error, some usernames may have been removed.
