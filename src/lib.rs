@@ -9,14 +9,16 @@ use async_graphql::{
 };
 use async_graphql_axum::{GraphQLProtocol, GraphQLRequest, GraphQLResponse, GraphQLWebSocket};
 use axum::{
-    extract::{rejection::TypedHeaderRejection, Extension, TypedHeader, WebSocketUpgrade},
+    extract::{
+        rejection::TypedHeaderRejection, ConnectInfo, Extension, TypedHeader, WebSocketUpgrade,
+    },
     headers::authorization::{Authorization, Bearer},
     response::{Html, IntoResponse, Response},
     routing::{get, get_service},
     Json, Router,
 };
-use graphql::AgentManager;
 pub use graphql::CertManager;
+use graphql::{AgentManager, RoleGuard};
 use review_database::{Database, Store};
 use rustls::{Certificate, ClientConfig, RootCertStore};
 use serde_json::json;
@@ -111,7 +113,7 @@ where
             tokio::spawn(async move {
                 axum_server::bind_rustls(config.addr, tls_config)
                     .handle(handle)
-                    .serve(router.into_make_service())
+                    .serve(router.into_make_service_with_connect_info::<SocketAddr>())
                     .await
                     .unwrap();
                 completed.notify_one();
@@ -174,14 +176,18 @@ async fn graphql_playground() -> Result<impl IntoResponse, Error> {
     )))
 }
 
+fn is_local(addr: SocketAddr) -> bool {
+    addr.ip().is_loopback()
+}
+
 async fn graphql_handler(
     Extension(schema): Extension<graphql::Schema>,
     Extension(store): Extension<Arc<RwLock<Store>>>,
+    ConnectInfo(addr): ConnectInfo<SocketAddr>,
     auth: Result<TypedHeader<Authorization<Bearer>>, TypedHeaderRejection>,
     request: GraphQLRequest,
 ) -> Result<GraphQLResponse, Error> {
     let request = request.into_inner();
-
     match auth {
         Ok(auth) => {
             let (username, role) = {
@@ -189,11 +195,17 @@ async fn graphql_handler(
                 validate_token(&store, auth.token())?
             };
             Ok(schema
-                .execute(request.data(username).data(role))
+                .execute(request.data(username).data(RoleGuard::Role(role)))
                 .await
                 .into())
         }
-        Err(_e) => Ok(schema.execute(request).await.into()),
+        Err(_e) => {
+            if is_local(addr) {
+                Ok(schema.execute(request.data(RoleGuard::Local)).await.into())
+            } else {
+                Ok(schema.execute(request).await.into())
+            }
+        }
     }
 }
 
@@ -222,7 +234,7 @@ async fn graphql_ws_handler(
                             validate_token(&store, token)?
                         };
 
-                        data.insert(role);
+                        data.insert(RoleGuard::Role(role));
                         data.insert(username);
                     }
                     Ok(data)
