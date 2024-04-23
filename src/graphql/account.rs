@@ -604,8 +604,9 @@ fn initial_credential() -> anyhow::Result<types::Account> {
 #[cfg(test)]
 mod tests {
     use async_graphql::Value;
+    use review_database::Role;
 
-    use crate::graphql::TestSchema;
+    use crate::graphql::{RoleGuard, TestSchema};
 
     #[tokio::test]
     async fn pagination() {
@@ -973,5 +974,79 @@ mod tests {
             )
             .await;
         assert_eq!(res.data.to_string(), r#"{expirationTime: 120}"#);
+    }
+
+    #[tokio::test]
+    async fn reset_admin_password() {
+        let schema = TestSchema::new().await;
+        let res = schema
+            .execute(
+                r#"mutation {
+                    insertAccount(
+                        username: "u1",
+                        password: "Ahh9booH",
+                        role: "SECURITY_ADMINISTRATOR",
+                        name: "John Doe",
+                        department: "Security"
+                    )
+                }"#,
+            )
+            .await;
+        assert_eq!(res.data.to_string(), r#"{insertAccount: "u1"}"#);
+
+        let res = schema
+            .execute(
+                r#"mutation {
+                    insertAccount(
+                        username: "u2",
+                        password: "Ahh9booH",
+                        role: "SYSTEM_ADMINISTRATOR",
+                        name: "John Doe",
+                        department: "Admin"
+                    )
+                }"#,
+            )
+            .await;
+        assert_eq!(res.data.to_string(), r#"{insertAccount: "u2"}"#);
+
+        let res = schema
+            .execute_with_guard(
+                r#"mutation {
+                resetAdminPassword(username: "u1", password: "not admin")
+            }"#,
+                RoleGuard::Local,
+            )
+            .await;
+        assert_eq!(res.data.to_string(), r#"null"#);
+
+        let res = schema
+            .execute_with_guard(
+                r#"mutation {
+                resetAdminPassword(username: "u3", password: "user not existed")
+            }"#,
+                RoleGuard::Local,
+            )
+            .await;
+        assert_eq!(res.data.to_string(), r#"null"#);
+
+        let res = schema
+            .execute_with_guard(
+                r#"mutation {
+                resetAdminPassword(username: "u2", password: "admin")
+            }"#,
+                RoleGuard::Local,
+            )
+            .await;
+        assert_eq!(res.data.to_string(), r#"{resetAdminPassword: "u2"}"#);
+
+        let res = schema
+            .execute_with_guard(
+                r#"mutation {
+                resetAdminPassword(username: "u2", password: "not local")
+            }"#,
+                RoleGuard::Role(Role::SystemAdministrator),
+            )
+            .await;
+        assert_eq!(res.data.to_string(), r#"null"#);
     }
 }

@@ -15,6 +15,10 @@ Versioning](https://semver.org/spec/v2.0.0.html).
   combinations of first, last, before, and after and apply it to GraphQL
   queries with pagination.
 - Added `LockyRansomware` detection event.
+- Added GraphQL query `resetAdminPassword` to allow resetting the password for an
+  existing user categorized as `SystemAdministrator` for administrators utilizing
+  the local network. This feature enhances the security and accessibility of user
+  accounts, providing administrators with a streamlined method for password management.
 
 ### Changed
 

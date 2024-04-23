@@ -838,10 +838,13 @@ impl TestSchema {
     }
 
     async fn execute(&self, query: &str) -> async_graphql::Response {
-        let request: async_graphql::Request = query.into();
-        self.schema
-            .execute(request.data(RoleGuard::Role(Role::SystemAdministrator)))
+        self.execute_with_guard(query, RoleGuard::Role(Role::SystemAdministrator))
             .await
+    }
+
+    async fn execute_with_guard(&self, query: &str, guard: RoleGuard) -> async_graphql::Response {
+        let request: async_graphql::Request = query.into();
+        self.schema.execute(request.data(guard)).await
     }
 
     async fn execute_stream(
