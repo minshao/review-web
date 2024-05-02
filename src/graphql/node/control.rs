@@ -412,8 +412,12 @@ fn update_common_node_settings(updated_node: &mut Node) {
     if let Some(settings_draft) = updated_node.settings_draft.as_ref() {
         // These are common node settings fields, that are not tied to specific modules
         updated_settings.customer_id = settings_draft.customer_id;
-        updated_settings.description = settings_draft.description.clone();
-        updated_settings.hostname = settings_draft.hostname.clone();
+        updated_settings
+            .description
+            .clone_from(&settings_draft.description);
+        updated_settings
+            .hostname
+            .clone_from(&settings_draft.hostname);
     }
     updated_node.settings = Some(updated_settings);
 }
@@ -438,9 +442,13 @@ fn update_module_specfic_settings(
             updated_settings.hog_giganto_ip = settings_draft.hog_giganto_ip;
             updated_settings.hog_giganto_port = settings_draft.hog_giganto_port;
             updated_settings.protocols = settings_draft.protocols;
-            updated_settings.protocol_list = settings_draft.protocol_list.clone();
+            updated_settings
+                .protocol_list
+                .clone_from(&settings_draft.protocol_list);
             updated_settings.sensors = settings_draft.sensors;
-            updated_settings.sensor_list = settings_draft.sensor_list.clone();
+            updated_settings
+                .sensor_list
+                .clone_from(&settings_draft.sensor_list);
         }
 
         if update_module_specific_settings.reconverge {
