@@ -8,7 +8,6 @@ use super::{
     Node, NodeInput, NodeMutation, NodeQuery, NodeTotalCount, PortNumber, ServerAddress,
     ServerPort, Setting,
 };
-use crate::graphql::validate_and_process_pagination_params;
 use async_graphql::{
     connection::{query, Connection, EmptyFields},
     types::ID,
@@ -35,9 +34,6 @@ impl NodeQuery {
         first: Option<i32>,
         last: Option<i32>,
     ) -> Result<Connection<String, Node, NodeTotalCount, EmptyFields>> {
-        let (after, before, first, last) =
-            validate_and_process_pagination_params(after, before, first, last)?;
-
         query(
             after,
             before,
