@@ -5,14 +5,13 @@ use async_graphql::{
     connection::{query, Connection, EmptyFields},
     Context, Enum, InputObject, Object, Result, SimpleObject,
 };
-use bincode::Options;
 use chrono::{DateTime, NaiveDateTime, TimeZone, Utc};
 use review_database::{
     self as database,
     types::{self},
     Direction, Store,
 };
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use std::{
     env,
     net::{AddrParseError, IpAddr},
@@ -26,13 +25,6 @@ pub struct SignedInAccount {
     expire_times: Vec<DateTime<Utc>>,
 }
 
-#[allow(clippy::module_name_repetitions)]
-#[derive(Clone, Deserialize, Serialize)]
-pub struct AccountPolicy {
-    pub expiration_time: i64,
-}
-
-const ACCOUNT_POLICY_KEY: &[u8] = b"account policy key";
 const REVIEW_ADMIN: &str = "REVIEW_ADMIN";
 
 #[derive(Default)]
@@ -371,18 +363,8 @@ impl AccountMutation {
         };
         let store = crate::graphql::get_store(ctx).await?;
         let map = store.account_policy_map();
-        if let Some(value) = map.get(ACCOUNT_POLICY_KEY)? {
-            let codec = bincode::DefaultOptions::new();
-            let mut policy = codec.deserialize::<AccountPolicy>(value.as_ref())?;
-            policy.expiration_time = expires_in.into();
-            let new_value = codec.serialize(&policy)?;
-            map.update(
-                (ACCOUNT_POLICY_KEY, value.as_ref()),
-                (ACCOUNT_POLICY_KEY, &new_value),
-            )?;
-        } else {
-            init_expiration_time(&store, expires_in)?;
-        }
+        map.update_expiry_period(expires_in)?;
+
         update_jwt_expires_in(expires_in)?;
         Ok(time)
     }
@@ -396,13 +378,10 @@ impl AccountMutation {
 /// corrupted.
 pub fn expiration_time(store: &Store) -> Result<i64> {
     let map = store.account_policy_map();
-    let value = map
-        .get(ACCOUNT_POLICY_KEY)?
-        .ok_or_else::<async_graphql::Error, _>(|| "incorrect account policy key".into())?;
-    let exp = bincode::DefaultOptions::new()
-        .deserialize::<AccountPolicy>(value.as_ref())?
-        .expiration_time;
-    Ok(exp)
+
+    map.current_expiry_period()?
+        .map(i64::from)
+        .ok_or("expiration time uninitialized".into())
 }
 
 /// Initializes the account policy with the given expiration time.
@@ -413,11 +392,7 @@ pub fn expiration_time(store: &Store) -> Result<i64> {
 /// fails to put the value.
 pub fn init_expiration_time(store: &Store, time: u32) -> anyhow::Result<()> {
     let map = store.account_policy_map();
-    let policy = AccountPolicy {
-        expiration_time: time.into(),
-    };
-    let value = bincode::DefaultOptions::new().serialize(&policy)?;
-    map.put(ACCOUNT_POLICY_KEY, &value)?;
+    map.init_expiry_period(time)?;
     Ok(())
 }
 
@@ -1051,6 +1026,19 @@ mod tests {
     #[tokio::test]
     async fn expiration_time() {
         let schema = TestSchema::new().await;
+
+        let store = schema.store().await;
+        assert!(super::init_expiration_time(&store, 12).is_ok());
+
+        let res = schema
+            .execute(
+                r#"query {
+                    expirationTime
+                }"#,
+            )
+            .await;
+        assert_eq!(res.data.to_string(), r#"{expirationTime: 12}"#);
+
         let res = schema
             .execute(
                 r#"mutation {
