@@ -45,7 +45,7 @@ impl NodeControlMutation {
         let i = id.as_str().parse::<u32>().map_err(|_| "invalid ID")?;
         let agents = ctx.data::<BoxedAgentManager>()?;
 
-        let node = {
+        let (node, _invalid_agents) = {
             let store = crate::graphql::get_store(ctx).await?;
             let node_map = store.node_map();
             node_map

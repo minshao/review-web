@@ -14,7 +14,7 @@ use async_graphql::{
     Context, Object, Result,
 };
 use chrono::Utc;
-use review_database::{Direction, Iterable, Store};
+use review_database::{Direction, Store};
 use std::{
     collections::HashMap,
     net::{IpAddr, Ipv4Addr, SocketAddr},
@@ -52,7 +52,7 @@ impl NodeQuery {
 
         let store = crate::graphql::get_store(ctx).await?;
         let map = store.node_map();
-        let Some(node) = map.get_by_id(i)? else {
+        let Some((node, _invalid_agents)) = map.get_by_id(i)? else {
             return Err("no such node".into());
         };
         Ok(node.into())
@@ -240,7 +240,7 @@ impl NodeMutation {
         let mut removed = Vec::<String>::with_capacity(ids.len());
         for id in ids {
             let i = id.as_str().parse::<u32>().map_err(|_| "invalid ID")?;
-            let key = map.remove(i)?;
+            let (key, _) = map.remove(i)?;
 
             let name = match String::from_utf8(key) {
                 Ok(key) => key,

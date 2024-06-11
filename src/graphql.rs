@@ -189,8 +189,8 @@ const DEFAULT_CUTOFF_RATE: f64 = 0.1;
 const DEFAULT_TRENDI_ORDER: i32 = 4;
 
 #[allow(clippy::type_complexity)] // since this is called within `load` only
-fn load_nodes<I, R>(
-    table: &I,
+fn load_nodes<'i, 'j, I, TI, R>(
+    table: &'i I,
     after: Option<String>,
     before: Option<String>,
     first: Option<usize>,
@@ -198,8 +198,10 @@ fn load_nodes<I, R>(
     prefix: Option<&[u8]>,
 ) -> Result<(Vec<R>, bool, bool)>
 where
-    I: database::Iterable<R>,
-    R: database::types::FromKeyValue + database::UniqueKey,
+    'i: 'j,
+    I: database::Iterable<'j, TI>,
+    TI: 'j + Iterator<Item = Result<R, anyhow::Error>>,
+    R: database::UniqueKey,
 {
     let (after, before, first, last) = validate_and_process_pagination_params(
         after,
@@ -251,8 +253,8 @@ fn encode_cursor(cursor: &[u8]) -> String {
     BASE64.encode(cursor)
 }
 
-fn load_edges<I, R, N, A, NodesField>(
-    table: &I,
+fn load_edges<'i, 'j, I, TI, R, N, A, NodesField>(
+    table: &'i I,
     after: Option<String>,
     before: Option<String>,
     first: Option<usize>,
@@ -260,8 +262,10 @@ fn load_edges<I, R, N, A, NodesField>(
     additional_fields: A,
 ) -> Result<Connection<String, N, A, EmptyFields, NodesField>>
 where
-    I: database::Iterable<R>,
-    R: database::types::FromKeyValue + database::UniqueKey,
+    'i: 'j,
+    I: database::Iterable<'j, TI>,
+    TI: 'j + Iterator<Item = Result<R, anyhow::Error>>,
+    R: database::UniqueKey,
     N: From<R> + OutputType,
     A: ObjectType,
     NodesField: ConnectionNameType,
@@ -312,8 +316,8 @@ where
     Ok(connection)
 }
 
-fn collect_edges<I, R>(
-    table: &I,
+fn collect_edges<'i, 'j, I, TI, R>(
+    table: &'i I,
     dir: Direction,
     from: Option<Vec<u8>>,
     to: Option<Vec<u8>>,
@@ -321,8 +325,10 @@ fn collect_edges<I, R>(
     count: usize,
 ) -> (Vec<anyhow::Result<R>>, bool)
 where
-    I: database::Iterable<R>,
-    R: database::types::FromKeyValue + database::UniqueKey,
+    'i: 'j,
+    I: database::Iterable<'j, TI>,
+    TI: 'j + Iterator<Item = Result<R, anyhow::Error>>,
+    R: database::UniqueKey,
 {
     let edges: Box<dyn Iterator<Item = _>> = if let Some(cursor) = from {
         let iter = if let Some(prefix) = prefix {

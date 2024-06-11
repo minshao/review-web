@@ -42,6 +42,7 @@ use async_graphql::{
     Context, InputObject, Object, Result, Subscription, Union, ID,
 };
 use chrono::{DateTime, Utc};
+use database::NodeTable;
 use futures::channel::mpsc::{unbounded, UnboundedSender};
 use futures_util::stream::Stream;
 use num_traits::FromPrimitive;
@@ -928,17 +929,14 @@ fn internal_customer_networks(
     Ok(customer_networks)
 }
 
-fn convert_sensors(
-    map: &IndexedTable<database::Node>,
-    sensors: &[ID],
-) -> anyhow::Result<Vec<String>> {
+fn convert_sensors(map: &NodeTable, sensors: &[ID]) -> anyhow::Result<Vec<String>> {
     let mut converted_sensors: Vec<String> = Vec::with_capacity(sensors.len());
     for id in sensors {
         let i = id
             .as_str()
             .parse::<u32>()
             .context(format!("invalid ID: {}", id.as_str()))?;
-        let Some(node) = map.get_by_id(i)? else {
+        let Some((node, _invalid_agents)) = map.get_by_id(i)? else {
             bail!("no such sensor")
         };
 
